@@ -16,3 +16,6 @@ Embeddings/*.npy
 
 # Ignore Data
 Data/*.npy
+
+# Ignore Experiments
+*_experimental*

@@ -471,8 +471,24 @@ class PathSynthesis:
         
         if verbose:
             print(f'Final Chamfer Distance: {CD.item()*og_scale:.7f}, Ordered Distance: {OD.item()*(og_scale**2):.7f}')
-            
-        return As[best_idx].cpu().numpy(), x[best_idx].cpu().numpy(), node_types[best_idx].cpu().numpy(), [tr,sc,an], transformed_curve, best_matches[0].detach().cpu().numpy(), [CD.item()*og_scale,OD.item()*og_scale**2]
+        
+        A = As[best_idx].cpu().numpy()
+        x = x[best_idx].cpu().numpy()
+        node_types = node_types[best_idx].cpu().numpy()
+        
+        n_joints = (A.sum(-1)>0).sum()
+        
+        A = A[:n_joints,:][:,:n_joints]
+        x = x[:n_joints]
+        node_types = node_types[:n_joints]
+        
+        transformation = [tr,sc,an]
+        start_theta = st_theta
+        end_theta = en_theta
+        performance = [CD.item()*og_scale,OD.item()*(og_scale**2)]
+        
+        return [A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve
+        # return As[best_idx].cpu().numpy(), x[best_idx].cpu().numpy(), node_types[best_idx].cpu().numpy(), [tr,sc,an], transformed_curve, best_matches[0].detach().cpu().numpy(), [CD.item()*og_scale,OD.item()*og_scale**2]
 
 def get_partial_matches(curves, target_curve, objective_fn):
     start_point = target_curve[0]
