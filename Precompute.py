@@ -1,4 +1,3 @@
-from LInK.nn import ContrastiveTrainLoop
 import pickle
 import os
 import numpy as np
@@ -34,3 +33,5 @@ embs = checkpoint.compute_embeddings_base(data, args.batch_size)
 # Save the embeddings
 if not os.path.exists(args.output_folder):
     os.makedirs(args.output_folder)
+    
+np.save(os.path.join(args.output_folder, args.output_name), embs)

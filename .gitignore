@@ -12,4 +12,7 @@ __pycache__/
 *.LInK
 
 # Ignore Embeddings
-./Embeddings/*.npy
+Embeddings/*.npy
+
+# Ignore Data
+Data/*.npy
