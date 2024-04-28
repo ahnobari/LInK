@@ -1,0 +1,15 @@
+# Ignore DS_Store
+.DS_Store
+
+# Ignore pycache
+__pycache__/
+*.py[cod]
+
+# Ignore Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Ignore Large Checkpoints
+*.LInK
+
+# Ignore Embeddings
+./Embeddings/*.npy
