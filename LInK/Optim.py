@@ -93,9 +93,9 @@ def ordered_objective_batch(c1,c2):
     
     return ds * 2 * torch.pi
 
-def make_batch_optim_obj(curve,As,x0s,node_types,timesteps=2000, CD_weight=1.0, OD_weight=1.0):
+def make_batch_optim_obj(curve,As,x0s,node_types,timesteps=2000, CD_weight=1.0, OD_weight=1.0, start_theta=0.0, end_theta=2*np.pi):
 
-    thetas = torch.linspace(0,torch.pi*2,timesteps).to(x0s.device)
+    thetas = torch.linspace(start_theta,end_theta,timesteps).to(x0s.device)
     sol = solve_rev_vectorized_batch(As,x0s,node_types,thetas)
     
     idxs = (As.sum(-1)>0).sum(-1)-1
@@ -178,7 +178,7 @@ def make_batch_optim_obj_partial(curve, partial,As,x0s,node_types,timesteps=2000
             OD = batch_ordered_distance(current_sol[:,np.linspace(0,current_sol.shape[1]-1,tiled_curves.shape[1],dtype=np.int32),:]/sc.unsqueeze(-1).unsqueeze(-1),tiled_curves/sc.unsqueeze(-1).unsqueeze(-1))
             # OD.sum().backward()
             CD = batch_chamfer_distance(current_sol/sc.unsqueeze(-1).unsqueeze(-1),tiled_curves/sc.unsqueeze(-1).unsqueeze(-1))
-            objective_function = CD_weight* CD + OD_weight * OD
+            objective_function = CD_weight* CD + OD_weight * OD + torch.abs(current_x0).mean()
             objective_function.sum().backward()
 
             grad = current_x0.grad.detach()
@@ -217,7 +217,7 @@ def progerss_uppdater(x, prog=None):
         prog.set_postfix_str(f'Current Best CD: {x[1]:.7f}')
     
 class PathSynthesis:
-    def __init__(self, trainer_instance, curves, As, x0s, node_types, precomputed_emb=None, optim_timesteps=2000, top_n = 300, init_optim_iters = 10, top_n_level2 = 30, CD_weight = 1.0, OD_weight = 0.25, BFGS_max_iter = 100, BFGS_lineserach_max_iter=10, BFGS_line_search_mult = 0.5, butterfly_gen=200, butterfly_pop=200, curve_size = 200, smoothing = True, n_freq = 5, device = None):
+    def __init__(self, trainer_instance, curves, As, x0s, node_types, precomputed_emb=None, optim_timesteps=2000, top_n = 300, init_optim_iters = 10, top_n_level2 = 30, CD_weight = 1.0, OD_weight = 0.25, BFGS_max_iter = 100, n_repos=1, BFGS_lineserach_max_iter=10, BFGS_line_search_mult = 0.5, butterfly_gen=200, butterfly_pop=200, curve_size = 200, smoothing = True, n_freq = 5, device = None):
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
@@ -247,6 +247,7 @@ class PathSynthesis:
         self.top_n_level2 = top_n_level2
         self.CD_weight = CD_weight
         self.OD_weight = OD_weight
+        self.n_repos = n_repos
     
     def synthesize(self, target_curve, verbose=True, visualize=True, partial=False):
         
@@ -306,7 +307,6 @@ class PathSynthesis:
             end_point = target_curve_[size-1]
             matched_point_idx = torch.argmin(torch.linalg.norm(transformed_curve-end_point,dim=-1))
             target_curve_copy_ = uniformize(target_curve_copy[:matched_point_idx+1].unsqueeze(0),self.curve_size)[0]
-            
         
         if verbose:
             print('Curve preprocessing done')
@@ -402,10 +402,16 @@ class PathSynthesis:
         else:
             prog2 = None
         
-        x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter, line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, progress=lambda x: progerss_uppdater(x,prog2))
+        for i in range(self.n_repos):
+            x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, progress=lambda x: progerss_uppdater(x,prog2))
+            if verbose:
+                print('Re-Positioning')
+            x0s = x
+        
+        x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter - self.n_repos* self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, progress=lambda x: progerss_uppdater(x,prog2))
         
         best_idx = f.argmin()
-        
+
         end_time = time.time()
         
         if verbose:
@@ -482,7 +488,7 @@ class PathSynthesis:
         x = x[:n_joints]
         node_types = node_types[:n_joints]
         
-        transformation = [tr,sc,an]
+        transformation = [tr.cpu().numpy(),sc.cpu().numpy(),an.cpu().numpy()]
         start_theta = st_theta
         end_theta = en_theta
         performance = [CD.item()*og_scale,OD.item()*(og_scale**2)]
