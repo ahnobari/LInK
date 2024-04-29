@@ -103,7 +103,7 @@ def linkage_joint_collisions(A,x0,nt,tolerance=0.08, sol=None, start=0,end=2*np.
     
     return collision_matrix
 
-def get_layers(A_, x0_, node_types_, sol_ = A_T, x0_T, node_types_T, sol_t, verbose=True):
+def get_layers(A_, x0_, node_types_, sol_, verbose=True):
     O = linkage_collisions(A_, x0_, node_types_, sol=sol_)
     O &= ~np.eye(O.shape[0],dtype=bool)
     C = linkage_joint_collisions(A_, x0_, node_types_, sol=sol_).T
