@@ -10,6 +10,7 @@ from tqdm.autonotebook import trange, tqdm
 from .Visulization import draw_mechanism
 from scipy.interpolate import CubicSpline
 import time
+import gradio as gr
 
 def cosine_search(target_emb, atlas_emb, max_batch_size = 1000000):
 
@@ -215,7 +216,11 @@ def progerss_uppdater(x, prog=None):
     if prog is not None:
         prog.update(1)
         prog.set_postfix_str(f'Current Best CD: {x[1]:.7f}')
-    
+
+def demo_progress_updater(x, prog=None, desc = ''):
+    if prog is not None:
+        prog(x[0], desc=desc + f'Current Best CD: {x[1]:.7f}')
+
 class PathSynthesis:
     def __init__(self, trainer_instance, curves, As, x0s, node_types, precomputed_emb=None, optim_timesteps=2000, top_n = 300, init_optim_iters = 10, top_n_level2 = 30, CD_weight = 1.0, OD_weight = 0.25, BFGS_max_iter = 100, n_repos=1, BFGS_lineserach_max_iter=10, BFGS_line_search_mult = 0.5, butterfly_gen=200, butterfly_pop=200, curve_size = 200, smoothing = True, n_freq = 5, device = None):
         if device is None:
@@ -496,6 +501,234 @@ class PathSynthesis:
         return [A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve
         # return As[best_idx].cpu().numpy(), x[best_idx].cpu().numpy(), node_types[best_idx].cpu().numpy(), [tr,sc,an], transformed_curve, best_matches[0].detach().cpu().numpy(), [CD.item()*og_scale,OD.item()*og_scale**2]
 
+    def demo_sythesize_step_1(self, target_curve, partial=False):
+        start_time = time.time()
+        
+        target_curve = preprocess_curves(torch.tensor(target_curve).float().to(self.device).unsqueeze(0),self.curve_size)[0]
+        
+        og_scale = get_scales(target_curve.unsqueeze(0))[0]
+        
+        size = target_curve.shape[0]
+        if partial:
+            #fit an ellipse that passes through the first and last point and is centered at the mean of the curve
+            center = (target_curve[-1] + target_curve[0])/2
+            start_point = target_curve[-1]
+            end_point = target_curve[0]
+            a = torch.linalg.norm(start_point-center)
+            b = torch.linalg.norm(end_point-center)
+            start_angle = torch.atan2(start_point[1]-center[1],start_point[0]-center[0])
+            end_angle = torch.atan2(end_point[1]-center[1],end_point[0]-center[0])
+            
+            angles = torch.linspace(start_angle,end_angle,self.curve_size).to(self.device)
+            ellipse = torch.stack([center[0] + a*torch.cos(angles),center[1] + b*torch.sin(angles)],1)
+            
+            angles = torch.linspace(start_angle+2*np.pi,end_angle,self.curve_size).to(self.device)
+            ellipse_2 = torch.stack([center[0] + a*torch.cos(angles),center[1] + b*torch.sin(angles)],1)
+            
+            #ellipse 1 length
+            l_1 = torch.linalg.norm(ellipse - target_curve.mean(0) , dim=-1).sum()
+            #ellipse 2 length
+            l_2 = torch.linalg.norm(ellipse_2 - target_curve.mean(0),dim=-1).sum()
+            
+            if l_1 > l_2:
+                target_curve = torch.cat([target_curve,ellipse],0)
+            else:
+                target_curve = torch.cat([target_curve,ellipse_2],0)
+        
+        target_curve_copy = preprocess_curves(target_curve.unsqueeze(0), self.curve_size)[0]
+        target_curve_ = target_curve.clone()
+        
+        if self.smoothing:
+            target_curve = smooth_hand_drawn_curves(target_curve.unsqueeze(0), n=self.curve_size, n_freq=self.n_freq)[0]
+        else:
+            target_curve = preprocess_curves(target_curve.unsqueeze(0),self.curve_size)[0]
+        
+        if partial:
+            # target_curve_copy_ = preprocess_curves(target_curve_[:size].unsqueeze(0), self.curve_size)[0]
+            tr,sc,an = find_transforms(uniformize(target_curve_.unsqueeze(0),self.curve_size),target_curve, batch_ordered_distance)
+            transformed_curve = apply_transforms(target_curve.unsqueeze(0),tr,sc,-an)[0]
+            end_point = target_curve_[size-1]
+            matched_point_idx = torch.argmin(torch.linalg.norm(transformed_curve-end_point,dim=-1))
+            target_curve = preprocess_curves(target_curve[:matched_point_idx+1].unsqueeze(0),self.curve_size)[0]
+            
+            target_uni = target_curve_copy.clone()
+            
+            tr,sc,an = find_transforms(uniformize(target_curve_.unsqueeze(0),self.curve_size),target_uni, batch_ordered_distance)
+            transformed_curve = apply_transforms(target_uni.unsqueeze(0),tr,sc,-an)[0]
+            end_point = target_curve_[size-1]
+            matched_point_idx = torch.argmin(torch.linalg.norm(transformed_curve-end_point,dim=-1))
+            target_curve_copy_ = uniformize(target_curve_copy[:matched_point_idx+1].unsqueeze(0),self.curve_size)[0]
+        else:
+            target_curve_copy_ = target_curve_copy.clone()
+        
+        fig1 = plt.figure(figsize=(5,5))
+        if partial:
+            plt.plot(target_curve_[:size].detach().cpu().numpy()[:,0],target_curve_[:size].detach().cpu().numpy()[:,1],color="indigo")
+        else:
+            plt.plot(target_curve_copy.cpu().numpy()[:,0],target_curve_copy.cpu().numpy()[:,1],color="indigo")
+        plt.axis('equal')
+        plt.axis('off')
+        plt.title('Original Curve')
+        
+        fig2 = plt.figure(figsize=(5,5))
+        plt.plot(target_curve.cpu().numpy()[:,0],target_curve.cpu().numpy()[:,1],color="indigo")
+        plt.axis('equal')
+        plt.axis('off')
+        plt.title('Preprocessed Curve')
+        
+        #save all variables which will be used in the next step
+        payload = [target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial,size]
+        
+        return payload, fig1, fig2
+    
+    def demo_sythesize_step_2(self, payload):
+        target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial, size = payload
+        
+        input_tensor = target_curve.unsqueeze(0)
+        batch_padd = preprocess_curves(torch.tensor(self.curves[np.random.choice(self.curves.shape[0],255)]).float().to(self.device))
+        input_tensor = torch.cat([input_tensor,batch_padd],0)
+        target_emb = self.models.compute_embeddings_input(input_tensor, 1000)[0]
+        target_emb = torch.tensor(target_emb).float().to(self.device)
+        
+        idxs, sim = cosine_search(target_emb, self.precomputed_emb)
+        idxs = idxs.detach().cpu().numpy()
+        
+        #max batch size is 250
+        tr,sc,an = [],[],[]
+        for i in range(int(np.ceil(self.top_n*5/250))):
+            tr_,sc_,an_ = find_transforms(torch.tensor(self.curves[idxs[i*250:(i+1)*250]]).float().to(self.device),target_curve_copy, batch_ordered_distance)
+            tr.append(tr_)
+            sc.append(sc_)
+            an.append(an_)
+        tr = torch.cat(tr,0)
+        sc = torch.cat(sc,0)
+        an = torch.cat(an,0)
+        tiled_curves = target_curve_copy.unsqueeze(0).tile([self.top_n*5,1,1])
+        tiled_curves = apply_transforms(tiled_curves,tr,sc,-an)
+        CD = batch_ordered_distance(tiled_curves/sc.unsqueeze(-1).unsqueeze(-1),torch.tensor(self.curves[idxs[:self.top_n*5]]).float().to(self.device)/sc.unsqueeze(-1).unsqueeze(-1))
+        
+        #get best matches index
+        tid = torch.argsort(CD)[:self.top_n].detach().cpu().numpy()
+        
+        grid_size = int(np.ceil(self.top_n**0.5))
+        fig, axs = plt.subplots(grid_size,grid_size,figsize=(10,10))
+        for i in range(grid_size):
+            for j in range(grid_size):
+                if i*grid_size+j < self.top_n:
+                    axs[i,j].plot(self.curves[idxs[tid][i*grid_size+j]][:,0],self.curves[idxs[tid][i*grid_size+j]][:,1], color='indigo')
+                    axs[i,j].plot(tiled_curves[tid][i*grid_size+j].cpu().numpy()[:,0],tiled_curves[tid][i*grid_size+j].cpu().numpy()[:,1],color="darkorange",alpha=0.7)
+                axs[i,j].axis('off')
+                axs[i,j].axis('equal')
+                
+        payload = [idxs, tid, target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial, size]
+        
+        return payload, fig
+    
+    def demo_sythesize_step_3(self, payload, progress=None):
+        idxs, tid, target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial, size = payload
+        
+        As = torch.tensor(self.As[idxs[tid]]).float().to(self.device)
+        x0s = torch.tensor(self.x0s[idxs[tid]]).float().to(self.device)
+        node_types = torch.tensor(self.node_types[idxs[tid]]).float().to(self.device)
+        
+        obj = make_batch_optim_obj(target_curve_copy, As, x0s, node_types,timesteps=self.optim_timesteps,OD_weight=self.OD_weight, CD_weight=self.CD_weight)
+
+        prog = None
+        
+        x,f = Batch_BFGS(x0s, obj, max_iter=self.init_optim_iters, line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, progress=lambda x: demo_progress_updater(x,progress,desc='Stage 1: '),threshhold=0.001)
+        
+        # top n level 2
+        top_n_2 = f.argsort()[:self.top_n_level2]
+        As = As[top_n_2]
+        x0s = x[top_n_2]
+        node_types = node_types[top_n_2]
+        
+        # if partial:
+        #     obj = make_batch_optim_obj_partial(target_curve_copy, target_curve_copy_, As, x0s, node_types,timesteps=self.optim_timesteps,OD_weight=0.25)
+        # else:
+        obj = make_batch_optim_obj(target_curve_copy, As, x0s, node_types,timesteps=self.optim_timesteps,OD_weight=self.OD_weight, CD_weight=self.CD_weight)
+        prog2 = None
+        
+        for i in range(self.n_repos):
+            x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, progress=lambda x: demo_progress_updater([x[0]/(self.n_repos+1) + i/(self.n_repos+1),x[1]],progress,desc='Stage 2: '))
+            x0s = x
+        
+        x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter - self.n_repos* self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, progress=lambda x: demo_progress_updater([x[0]/(self.n_repos+1) + self.n_repos/(self.n_repos+1),x[1]],progress,desc='Stage 2: '))
+        
+        best_idx = f.argmin()
+
+        end_time = time.time()
+        
+        if partial:
+            target_uni = uniformize(target_curve_copy.unsqueeze(0),self.optim_timesteps)[0]
+            
+            tr,sc,an = find_transforms(uniformize(target_curve_.unsqueeze(0),self.optim_timesteps),target_uni, batch_ordered_distance)
+            transformed_curve = apply_transforms(target_uni.unsqueeze(0),tr,sc,-an)[0]
+            end_point = target_curve_[size-1]
+            matched_point_idx = torch.argmin(torch.linalg.norm(transformed_curve-end_point,dim=-1))
+            
+            sol = solve_rev_vectorized_batch(As[best_idx:best_idx+1],x[best_idx:best_idx+1],node_types[best_idx:best_idx+1],torch.linspace(0,torch.pi*2,self.optim_timesteps).to(self.device))
+            tid = (As[best_idx:best_idx+1].sum(-1)>0).sum(-1)-1
+            best_matches = sol[np.arange(sol.shape[0]),tid]
+            original_match = best_matches.clone()
+            best_matches = uniformize(best_matches,self.optim_timesteps)
+            
+            tr,sc,an = find_transforms(best_matches,target_uni, batch_ordered_distance)
+            tiled_curves = uniformize(target_uni[:matched_point_idx].unsqueeze(0),self.optim_timesteps)
+            tiled_curves = apply_transforms(tiled_curves,tr,sc,-an)
+            transformed_curve = tiled_curves[0].detach().cpu().numpy()
+            
+            best_matches = get_partial_matches(best_matches,tiled_curves[0],batch_ordered_distance)
+            
+            CD = batch_chamfer_distance(best_matches/sc.unsqueeze(-1).unsqueeze(-1),tiled_curves/sc.unsqueeze(-1).unsqueeze(-1))
+            OD = ordered_objective_batch(best_matches/sc.unsqueeze(-1).unsqueeze(-1),tiled_curves/sc.unsqueeze(-1).unsqueeze(-1))
+            
+            st_id, en_id = get_partial_index(original_match,tiled_curves[0],batch_ordered_distance)
+            
+            st_theta = torch.linspace(0,2*np.pi,self.optim_timesteps).to(self.device)[st_id].squeeze().cpu().numpy()
+            en_theta = torch.linspace(0,2*np.pi,self.optim_timesteps).to(self.device)[en_id].squeeze().cpu().numpy()
+            
+            st_theta[st_theta>en_theta] = st_theta[st_theta>en_theta] - 2*np.pi
+            
+        else:
+            sol = solve_rev_vectorized_batch(As[best_idx:best_idx+1],x[best_idx:best_idx+1],node_types[best_idx:best_idx+1],torch.linspace(0,torch.pi*2,self.optim_timesteps).to(self.device))
+            tid = (As[best_idx:best_idx+1].sum(-1)>0).sum(-1)-1
+            best_matches = sol[np.arange(sol.shape[0]),tid]
+            best_matches = uniformize(best_matches,self.optim_timesteps)
+            target_uni = uniformize(target_curve_copy.unsqueeze(0),self.optim_timesteps)[0]
+            
+            tr,sc,an = find_transforms(best_matches,target_uni, batch_ordered_distance)
+            tiled_curves = uniformize(target_curve_copy.unsqueeze(0),self.optim_timesteps)
+            tiled_curves = apply_transforms(tiled_curves,tr,sc,-an)
+            transformed_curve = tiled_curves[0].detach().cpu().numpy()
+            
+            CD = batch_chamfer_distance(best_matches/sc.unsqueeze(-1).unsqueeze(-1),tiled_curves/sc.unsqueeze(-1).unsqueeze(-1))
+            OD = ordered_objective_batch(best_matches/sc.unsqueeze(-1).unsqueeze(-1),tiled_curves/sc.unsqueeze(-1).unsqueeze(-1))
+            
+            st_theta = 0.
+            en_theta = np.pi*2
+        
+        fig, ax = plt.subplots(1,1,figsize=(10,10))
+        ax = draw_mechanism(As[best_idx].cpu().numpy(),x[best_idx].cpu().numpy(),np.where(node_types[best_idx].cpu().numpy())[0],[0,1],highlight=tid[0].item(),solve=True, thetas=np.linspace(st_theta,en_theta,self.optim_timesteps),ax=ax)
+        ax.plot(transformed_curve[:,0], transformed_curve[:,1], color="indigo", alpha=0.7, linewidth=2)
+        
+        A = As[best_idx].cpu().numpy()
+        x = x[best_idx].cpu().numpy()
+        node_types = node_types[best_idx].cpu().numpy()
+        
+        n_joints = (A.sum(-1)>0).sum()
+        
+        A = A[:n_joints,:][:,:n_joints]
+        x = x[:n_joints]
+        node_types = node_types[:n_joints]
+        
+        transformation = [tr.cpu().numpy(),sc.cpu().numpy(),an.cpu().numpy()]
+        start_theta = st_theta
+        end_theta = en_theta
+        performance = [CD.item()*og_scale,OD.item()*(og_scale**2)]
+        
+        return fig, [[A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve], gr.update(value = {"Progress":1.0})
+        
 def get_partial_matches(curves, target_curve, objective_fn):
     start_point = target_curve[0]
     end_point = target_curve[-1]
