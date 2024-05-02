@@ -24,7 +24,6 @@ def find_path(A, motor = [0,1], fixed_nodes=[0, 1]):
     knowns = np.concatenate([fixed_nodes,[motor[-1]]])
     
     unkowns = unkowns[np.logical_not(np.isin(unkowns,knowns))]
-
     
     counter = 0
     while unkowns.shape[0] != 0:

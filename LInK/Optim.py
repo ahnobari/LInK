@@ -502,6 +502,7 @@ class PathSynthesis:
         # return As[best_idx].cpu().numpy(), x[best_idx].cpu().numpy(), node_types[best_idx].cpu().numpy(), [tr,sc,an], transformed_curve, best_matches[0].detach().cpu().numpy(), [CD.item()*og_scale,OD.item()*og_scale**2]
 
     def demo_sythesize_step_1(self, target_curve, partial=False):
+        torch.cuda.empty_cache()
         start_time = time.time()
         
         target_curve = preprocess_curves(torch.tensor(target_curve).float().to(self.device).unsqueeze(0),self.curve_size)[0]
@@ -726,7 +727,7 @@ class PathSynthesis:
         start_theta = st_theta
         end_theta = en_theta
         performance = [CD.item()*og_scale,OD.item()*(og_scale**2)]
-        
+        torch.cuda.empty_cache()
         return fig, [[A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve], gr.update(value = {"Progress":1.0})
         
 def get_partial_matches(curves, target_curve, objective_fn):

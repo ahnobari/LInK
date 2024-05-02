@@ -158,3 +158,10 @@ function test(){
     document.head.appendChild(script);
 }
 '''
+
+css = """
+div:has(>.clr_btn) {max-width: 350px !important}
+# .prog .output-class{display:none !important;}
+# .prog .confidence-set{margin-top:10px;}
+.plotpad{padding-top: 15px;}
+"""
