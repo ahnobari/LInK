@@ -5,6 +5,7 @@ import pyvista as pv
 from tqdm import trange
 import uuid
 import os
+import gurobipy as gp
 
 def onSegment(p, q, r): 
     if ( (q[0] <= max(p[0], r[0])) and (q[0] >= min(p[0], r[0])) and 
@@ -107,136 +108,71 @@ def linkage_joint_collisions(A,x0,nt,tolerance=0.08, sol=None, start=0,end=2*np.
     
     return collision_matrix
 
-def get_layers(A_, x0_, node_types_, sol_, verbose=True, relax_groud = False):
-    O = linkage_collisions(A_, x0_, node_types_, sol=sol_)
+def get_layers(A, x0, node_types, sol):
+    O = linkage_collisions(A, x0, node_types, sol=sol)
     O &= ~np.eye(O.shape[0],dtype=bool)
-    C = linkage_joint_collisions(A_, x0_, node_types_, sol=sol_).T
-    l1,l2 = np.where(np.triu(A_))
-    A = np.zeros([A_.shape[0],len(l1)])
-    A[l1,np.arange(len(l1))] = 1
-    A[l2,np.arange(len(l1))] = 1
-    A = A.astype(bool)
+    C = linkage_joint_collisions(A, x0, node_types, sol=sol).T
+    l1,l2 = np.where(np.triu(A))
+    AJ = np.zeros([A.shape[0],len(l1)])
+    AJ[l1,np.arange(len(l1))] = 1
+    AJ[l2,np.arange(len(l1))] = 1
+    AJ = AJ.astype(bool)
     
-    desvar_zeros = np.zeros(O.shape[0]+2*C.shape[0]+C.sum()+O.sum())
-    z_idx = np.arange(0,O.shape[0])
-    u_idx = np.arange(O.shape[0],O.shape[0]+C.shape[0])
-    v_idx = np.arange(O.shape[0]+C.shape[0],O.shape[0]+2*C.shape[0])
-    y_idx = np.arange(O.shape[0]+2*C.shape[0],O.shape[0]+2*C.shape[0]+C.sum())
-    x_idx = np.arange(O.shape[0]+2*C.shape[0]+C.sum(),O.shape[0]+2*C.shape[0]+C.sum()+O.sum())
-
     lt = 1.0
-    N = lt*O.shape[0]*100
-    
-    A1 = np.zeros((z_idx.shape[0],desvar_zeros.shape[0]))
-    A1[z_idx,z_idx] = 1
-    C1 = LinearConstraint(A1,lb=0, ub=(O.shape[0]+1)*lt*2)
+    N = lt*10000
 
-    A2 = []
-    lbs = []
+    m = gp.Model("LinkageCAD")
+
+    z = m.addVars(O.shape[0], lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="z")
+    u = m.addVars(C.shape[0], lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="u")
+    v = m.addVars(C.shape[0], lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="v")
+    y = m.addVars(int(C.sum()), vtype=gp.GRB.BINARY, name="y")
+    x = m.addVars(int(O.sum()//2), vtype=gp.GRB.BINARY, name="x")
+    ml = m.addVar(lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="ml")
+
+    act_con = m.addConstr(z[0]==0., name="z0")
+
     counter = 0
     for i in range(O.shape[0]):
         col_i = np.where(O[i])[0]
+        col_i = col_i[col_i>i]
         for j in col_i:
-            row = np.zeros(desvar_zeros.shape[0])
-            row[z_idx[i]] = 1
-            row[z_idx[j]] = -1
-            row[x_idx[counter]] = N
-            A2.append(row)
-            lbs.append(lt)
-            
-            row = np.zeros(desvar_zeros.shape[0])
-            row[z_idx[i]] = -1
-            row[z_idx[j]] = 1
-            row[x_idx[counter]] = -N
-            A2.append(row)
-            lbs.append(lt-N)
-            
+            m.addConstr(z[i]-z[j] + N * x[counter] >= lt, name=f"z{i}-{j}+")
+            m.addConstr(z[j]-z[i] + N * (1 - x[counter]) >= lt, name=f"z{i}-{j}-")
             counter += 1
 
-    A2 = np.array(A2)
-    C2 = LinearConstraint(A2,lb=lbs)
-
-    A3 = np.zeros((1,desvar_zeros.shape[0]))
-    A3[0,z_idx[0]] = 1
-    C3 = LinearConstraint(A3,lb=0, ub=0)
-
-    A4 = []
-    ub = []
-    for j in range(C.shape[0]):
-        col_j = np.where(A[j])[0]
-        for i in col_j:
-            row = np.zeros(desvar_zeros.shape[0])
-            row[u_idx[j]] = 1
-            row[z_idx[i]] = -1
-            A4.append(row)
-            ub.append(0)
-            
-            row = np.zeros(desvar_zeros.shape[0])
-            row[v_idx[j]] = -1
-            row[z_idx[i]] = 1
-            A4.append(row)
-            ub.append(0)
-
-    A4 = np.array(A4)
-    C4 = LinearConstraint(A4,ub=ub)
-
-    A5 = []
-    ub = []
     counter = 0
     for j in range(C.shape[0]):
-        if (not relax_groud) or (relax_groud and node_types_[j] == 0):
-            col_i = np.where(C[j])[0]
-            for i in col_i:
-                row = np.zeros(desvar_zeros.shape[0])
-                row[z_idx[i]] = -1
-                row[v_idx[j]] = 1
-                row[y_idx[counter]] = -N
-                A5.append(row)
-                ub.append(-lt)
-                
-                row = np.zeros(desvar_zeros.shape[0])
-                row[z_idx[i]] = 1
-                row[u_idx[j]] = -1
-                row[y_idx[counter]] = N
-                A5.append(row)
-                ub.append(N+lt)
-                
-                counter += 1 
+        col_i = np.where(C[j])[0]
+        for i in col_i:
+            m.addConstr(z[i] >= lt + v[j] - N * y[counter], name=f"z{i}>v{j}")
+            m.addConstr(z[i] <= u[j] - lt + N * (1-y[counter]), name=f"z{i}<u{j}")
 
-    A5 = np.array(A5)
-    C5 = LinearConstraint(A5,ub=ub)
+    m.addConstrs((ml >= z[i] for i in range(O.shape[0])), name="ml>z")
 
-    A6 = np.zeros([y_idx.shape[0]+x_idx.shape[0],desvar_zeros.shape[0]])
-    A6[np.arange(y_idx.shape[0]),y_idx] = 1
-    A6[y_idx.shape[0]+np.arange(x_idx.shape[0]),x_idx] = 1
-    C6 = LinearConstraint(A6,lb=0, ub=1)
+    m.setObjective(ml+gp.quicksum(v)-gp.quicksum(u), gp.GRB.MINIMIZE)
+    m.setParam('TimeLimit', 30)
+    m.setParam('Threads', 24)
 
-    C_obj = np.zeros(desvar_zeros.shape[0])
-    C_obj[z_idx] = 1
-    C_obj[v_idx] = 1
-    C_obj[u_idx] = -1
-
-    integrality = np.zeros(desvar_zeros.shape[0])
-    integrality[y_idx] = 1
-    integrality[x_idx] = 1
+    m.optimize()
     
-    results = milp(C_obj,integrality=integrality,constraints=[C1,C2,C3,C4,C5,C6],options={'disp':verbose})
-    
-    if results.status != 0 and not relax_groud:
-        if verbose:
-            print('No solution found relaxing ground constraints ...')
-            
-        return get_layers(A_, x0_, node_types_, sol_, verbose=verbose, relax_groud=True)
-    elif results.status != 0:
-        if verbose:
-            print('Mechanism is not manufacturable ...')
+    if m.status == gp.GRB.INFEASIBLE:
+        print("Not Manufacturable!")
+        return get_layers_relaxed(A, x0, node_types, sol)
         
-        return get_layers_relaxed(A_, x0_, node_types_, sol_), False, relax_groud
     else:
-        return results.x[z_idx], True, relax_groud
+        if m.status == gp.GRB.TIME_LIMIT:
+            print("Time limit reached")
+            print("Objective value: ", m.objVal)
+        else:
+            print("Optimal")
+            print("Objective value: ", m.objVal)
+
+        z = np.array([z[i].X for i in range(O.shape[0])]).astype(int)
+        
+        return z
 
 def get_layers_relaxed(A_, x0_, node_types_, sol_, verbose=True, relax_groud = False):
-# def linkage_3D_config(A,x0,nt,col_mat=None):
     A = A_
     x0 = x0_
     nt = node_types_
