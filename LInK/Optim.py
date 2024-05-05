@@ -651,10 +651,10 @@ class PathSynthesis:
         prog2 = None
         
         for i in range(self.n_repos):
-            x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, threshhold=0.3, progress=lambda x: demo_progress_updater([x[0]/(self.n_repos+1) + i/(self.n_repos+1),x[1]],progress,desc='Stage 2: '))
+            x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, threshhold=0.03, progress=lambda x: demo_progress_updater([x[0]/(self.n_repos+1) + i/(self.n_repos+1),x[1]],progress,desc='Stage 2: '))
             x0s = x
         
-        x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter - self.n_repos* self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, threshhold=0.3, progress=lambda x: demo_progress_updater([x[0]/(self.n_repos+1) + self.n_repos/(self.n_repos+1),x[1]],progress,desc='Stage 2: '))
+        x,f = Batch_BFGS(x0s, obj, max_iter=self.BFGS_max_iter - self.n_repos* self.BFGS_max_iter//(self.n_repos+1), line_search_max_iter=self.BFGS_lineserach_max_iter, tau=self.BFGS_line_search_mult, threshhold=0.03, progress=lambda x: demo_progress_updater([x[0]/(self.n_repos+1) + self.n_repos/(self.n_repos+1),x[1]],progress,desc='Stage 2: '))
         
         best_idx = f.argmin()
 

@@ -140,4 +140,4 @@ with gr.Blocks(css=css, js=draw_script) as block:
     
     clr_btn.click(lambda x: x, js='document.getElementById("sketch").innerHTML = ""')
     
-block.launch(server_port=1238,share=False,max_threads=200,inline=False)
+block.launch(server_port=1238,share=True,max_threads=200,inline=False)
