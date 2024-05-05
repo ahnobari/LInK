@@ -60,7 +60,7 @@ def point_line_distance(p1, p2, p3):
     if np.dot(v,w) * np.dot(u,s) < 0:
         d = np.min([np.linalg.norm(p1-p3),np.linalg.norm(p2-p3)])
     else:
-        d = np.cross(v,w)/np.linalg.norm(v)
+        d = abs(np.cross(v,w)/np.linalg.norm(v))
     
     return d
 
@@ -99,7 +99,7 @@ def linkage_joint_collisions(A,x0,nt,tolerance=0.08, sol=None, start=0,end=2*np.
         s = sol[:,i,:]
         for j in range(n_links):
             for k in range(A.shape[0]):
-                if point_line_distance(s[l1[j]],s[l2[j]],x0[k]) < tolerance:
+                if point_line_distance(s[l1[j]],s[l2[j]],s[k]) < tolerance:
                     collision_matrix[j,k] = True
     
     for i in range(n_links):
@@ -108,7 +108,8 @@ def linkage_joint_collisions(A,x0,nt,tolerance=0.08, sol=None, start=0,end=2*np.
     
     return collision_matrix
 
-def get_layers(A, x0, node_types, sol):
+def get_layers(A, x0, node_types, sol, zero_act = False, relax_groud = True):
+    
     O = linkage_collisions(A, x0, node_types, sol=sol)
     O &= ~np.eye(O.shape[0],dtype=bool)
     C = linkage_joint_collisions(A, x0, node_types, sol=sol).T
@@ -122,15 +123,17 @@ def get_layers(A, x0, node_types, sol):
     N = lt*10000
 
     m = gp.Model("LinkageCAD")
+    m.setParam('LogToConsole', 0)
 
     z = m.addVars(O.shape[0], lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="z")
     u = m.addVars(C.shape[0], lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="u")
     v = m.addVars(C.shape[0], lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="v")
     y = m.addVars(int(C.sum()), vtype=gp.GRB.BINARY, name="y")
     x = m.addVars(int(O.sum()//2), vtype=gp.GRB.BINARY, name="x")
-    ml = m.addVar(lb=0, ub=O.shape[0]*lt, vtype=gp.GRB.INTEGER, name="ml")
-
-    act_con = m.addConstr(z[0]==0., name="z0")
+    ml = m.addVar(lb=0, ub=O.shape[0]*lt + lt, vtype=gp.GRB.INTEGER, name="ml")
+    
+    if zero_act:
+        act_con = m.addConstr(z[0]==0., name="z0")
 
     counter = 0
     for i in range(O.shape[0]):
@@ -141,16 +144,24 @@ def get_layers(A, x0, node_types, sol):
             m.addConstr(z[j]-z[i] + N * (1 - x[counter]) >= lt, name=f"z{i}-{j}-")
             counter += 1
 
+    for j in range(C.shape[0]):
+        col_i = np.where(AJ[j])[0]
+        for i in col_i:
+            m.addConstr(v[j] >= z[i], name=f"v{j}>z{i}")
+            m.addConstr(u[j] <= z[i], name=f"u{j}<z{i}")
+
     counter = 0
     for j in range(C.shape[0]):
-        col_i = np.where(C[j])[0]
-        for i in col_i:
-            m.addConstr(z[i] >= lt + v[j] - N * y[counter], name=f"z{i}>v{j}")
-            m.addConstr(z[i] <= u[j] - lt + N * (1-y[counter]), name=f"z{i}<u{j}")
+        if node_types[j] == 0 or not relax_groud:
+            col_i = np.where(C[j])[0]
+            for i in col_i:
+                m.addConstr(z[i] >= v[j] + lt - N * y[counter], name=f"z{i}>v{j}")
+                m.addConstr(z[i] <= u[j] - lt + N * (1-y[counter]), name=f"z{i}<u{j}")
+                counter += 1
 
     m.addConstrs((ml >= z[i] for i in range(O.shape[0])), name="ml>z")
 
-    m.setObjective(ml+gp.quicksum(v)-gp.quicksum(u), gp.GRB.MINIMIZE)
+    m.setObjective(ml, gp.GRB.MINIMIZE)
     m.setParam('TimeLimit', 30)
     m.setParam('Threads', 24)
 
@@ -158,7 +169,7 @@ def get_layers(A, x0, node_types, sol):
     
     if m.status == gp.GRB.INFEASIBLE:
         print("Not Manufacturable!")
-        return get_layers_relaxed(A, x0, node_types, sol)
+        return get_layers_relaxed(A, x0, node_types, sol), False
         
     else:
         if m.status == gp.GRB.TIME_LIMIT:
@@ -169,8 +180,7 @@ def get_layers(A, x0, node_types, sol):
             print("Objective value: ", m.objVal)
 
         z = np.array([z[i].X for i in range(O.shape[0])]).astype(int)
-        
-        return z
+        return z, True
 
 def get_layers_relaxed(A_, x0_, node_types_, sol_, verbose=True, relax_groud = False):
     A = A_
@@ -269,3 +279,87 @@ def get_html(plotter):
         
     os.remove(f'{f_id}.html')
     return data
+
+def get_3d_config(A,x0,nt,z_index):
+    
+    A, x0, nt, z_index = np.array(A), np.array(x0), np.array(nt), np.array(z_index)
+    
+    n_joints = (A.sum(-1)>0).sum()
+    A = A[:n_joints,:][:,:n_joints]
+    x0 = x0[:n_joints]
+    nt = nt[:n_joints]
+    n_links = int(A.sum()/2)
+
+    l1,l2 = np.where(np.triu(A))
+    
+    linkages = []
+    
+    max_len = 0
+    min_len = float(np.inf)
+
+    for j in range(n_links):
+        length= np.linalg.norm(x0[l1[j]]-x0[l2[j]])
+        if length>max_len:
+            max_len = float(length)
+        if length<min_len:
+            min_len = float(length)
+    
+    scale_min = 0.25/min_len
+    scale_target = 1.0/max_len
+    scale = max(scale_min,scale_target)
+    
+    x0 = x0*scale
+
+    for j in range(n_links):
+        length= np.linalg.norm(x0[l1[j]]-x0[l2[j]])
+        angle = np.arctan2(x0[l2[j]][1]-x0[l1[j]][1],x0[l2[j]][0]-x0[l1[j]][0])
+        linkages.append([length,0.1,0.05,0.03, angle, x0[l1[j]].tolist()+[float(z_index[j])*0.05]])
+    
+    joints_max_z = np.zeros(x0.shape[0])
+    joints_min_z = np.zeros(x0.shape[0]) + np.inf
+    
+    for i in range(n_links):
+        joints_max_z[l1[i]] = max(joints_max_z[l1[i]],z_index[i])
+        joints_max_z[l2[i]] = max(joints_max_z[l2[i]],z_index[i])
+        joints_min_z[l1[i]] = min(joints_min_z[l1[i]],z_index[i])
+        joints_min_z[l2[i]] = min(joints_min_z[l2[i]],z_index[i])
+
+    joints_max_z = joints_max_z*0.05
+    joints_min_z = joints_min_z*0.05
+
+    joints = []
+    for i in range(x0.shape[0]):
+        if nt[i] == 1:
+            for j in np.where(l1==i)[0]:
+                joints.append(x0[i].tolist()+[0.05,z_index[j]*0.05,1])
+            for j in np.where(l2==i)[0]:
+                joints.append(x0[i].tolist()+[0.05,z_index[j]*0.05,1])
+        else:
+            joints.append(x0[i].tolist()+[float(joints_max_z[i]-joints_min_z[i])+0.05,float(joints_min_z[i]+joints_max_z[i])/2,0])
+
+    return [linkages, joints], joints_max_z[-1], scale
+
+def get_animated_3d_config(A,x0,nt,z_index,sol):
+    A, x0, nt, z_index, sol = np.array(A), np.array(x0), np.array(nt), np.array(z_index), np.array(sol)
+    configs = []
+    for i in range(sol.shape[1]):
+        c,z,s = get_3d_config(A,sol[:,i,:],nt,z_index)
+        configs.append(c)
+    
+    highligh_curve = np.pad(sol[-1,:,:]*s,[[0,0],[0,1]],constant_values=z+0.025)
+
+    return configs, highligh_curve.tolist()
+
+def create_3d_html(A,x0,nt,z_index,sol, template_path='./static/animation.htm', save_path='./static/animated.html'):
+    
+    res,hc = get_animated_3d_config(A,x0,nt,z_index,sol)
+    js_var = 'window.res = ' + str(res) + ';\n'
+    js_var += 'window.hc = ' + str(hc) + ';'
+    
+    with open(template_path, 'r') as file:
+        filedata = file.read()
+        
+    filedata = filedata.replace('{res}',js_var)
+    
+    with open(save_path, 'w') as file:
+        file.write(filedata)

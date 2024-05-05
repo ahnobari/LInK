@@ -5,7 +5,14 @@ from io import StringIO
 import xml.etree.ElementTree as etree
 from svgpath2mpl import parse_path
 
-def draw_mechanism(A,x0,fixed_nodes,motor, ax=None, highlight=None, solve=True, thetas = np.linspace(0,np.pi*2,200), def_alpha = 1.0, h_alfa =1.0, h_c = "#f15a24"):
+def draw_mechanism(A,x0,fixed_nodes=None,motor=[0,1],node_types=None, ax=None, highlight=None, solve=True, thetas = np.linspace(0,np.pi*2,200), def_alpha = 1.0, h_alfa =1.0, h_c = "#f15a24"):
+    
+    if fixed_nodes is None and node_types is None:
+        raise ValueError("Either fixed_nodes or node_types should be provided")
+
+    if fixed_nodes is None:
+        fixed_nodes = np.where(node_types)[0]
+    
     def fetch_path():
     #     r = requests.get(svg_url)
         root = etree.parse(StringIO('<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 338"><defs><style>.cls-1{fill:#1a1a1a;stroke:#1a1a1a;stroke-linecap:round;stroke-miterlimit:10;stroke-width:20px;}</style></defs><path class="cls-1" d="M45.5,358.5l70.71-70.71M46,287.5H644m-507.61,71,70.72-70.71M223,358.5l70.71-70.71m20.18,70.72,70.71-70.71m13.67,70.7,70.71-70.71m20.19,70.72,70.71-70.71m15.84,70.71,70.71-70.71M345,39.62A121.38,121.38,0,1,1,223.62,161,121.38,121.38,0,0,1,345,39.62Z" transform="translate(-35.5 -29.62)"/></svg>')).getroot()

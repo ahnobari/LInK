@@ -15,7 +15,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
 import gradio as gr
 from LInK.demo import draw_html, draw_script, css
 from LInK.Solver import solve_rev_vectorized_batch_CPU
-from LInK.CAD import get_layers, plot_config_3D, plot_3D_animation
+from LInK.CAD import get_layers, plot_config_3D, plot_3D_animation, create_3d_html
 from LInK.Optim import PathSynthesis
 from pathlib import Path
 
@@ -60,30 +60,23 @@ def create_synthesizer(n_freq, maximum_joint_count, time_steps, top_n, init_opti
     synthesizer = PathSynthesis(Trainer, curves[mask], As[mask], x0s[mask], node_types[mask], emb[mask], BFGS_max_iter=BFGS_max_iter, n_freq=n_freq, optim_timesteps=time_steps, top_n=top_n, init_optim_iters=init_optim_iters, top_n_level2=top_n_level2)
     return synthesizer
     
-def make_cad(synth_out, progress=gr.Progress(track_tqdm=True)):
+def make_cad(synth_out, partial, progress=gr.Progress(track_tqdm=True)):
     
     progress(0, desc="Generating 3D Model ...")
     
     f_name = str(uuid.uuid4())
     
-    with open(f'./static/{f_name}.pkl', 'wb') as f:
-        pickle.dump(synth_out, f)
-    progress(0.25, desc="Generating 3D Model ...")
-    os.system(f'python3 make_cad.py --input ./static/{f_name}.pkl')
-    progress(1.0, desc="Generating 3D Model ...")
+    A_M, x0_M, node_types_M, start_theta_M, end_theta_M, tr_M = synth_out[0]
     
-    return gr.HTML(f'<iframe width="100%" height="800px" src="file=static/{f_name}.html"></iframe>',label="3D Plot",elem_classes="plot3d")
-
-def make_3D_animation(synth_out, progress=gr.Progress(track_tqdm=True)):
-    progress(0, desc="Generating 3D Animation (This will take a while)...")
-    f_name = str(uuid.uuid4())
+    sol_m = solve_rev_vectorized_batch_CPU(A_M[np.newaxis], x0_M[np.newaxis],node_types_M[np.newaxis],np.linspace(start_theta_M, end_theta_M, 200))[0]
+    z,status = get_layers(A_M, x0_M, node_types_M,sol_m)
     
-    with open(f'./static/{f_name}.pkl', 'wb') as f:
-        pickle.dump(synth_out, f)
-
-    os.system(f'python3 make_cad_anim.py --input ./static/{f_name}.pkl')
+    if partial:
+        sol_m = np.concatenate([sol_m, sol_m[:,::-1,:]], axis=1)
     
-    return gr.HTML(f'<img src="file=./static/{f_name}.gif" width="100%">',label="3D Animation")
+    create_3d_html(A_M, x0_M, node_types_M, z, sol_m, template_path = f'./{args.static_folder}/animation.html', save_path=f'./{args.static_folder}/{f_name}.html')
+    
+    return gr.HTML(f'<iframe width="100%" height="800px" src="file={args.static_folder}/{f_name}.html"></iframe>',label="3D Plot",elem_classes="plot3d")
 
 gr.set_static_paths(paths=[Path('./static')])
 
@@ -135,17 +128,13 @@ with gr.Blocks(css=css, js=draw_script) as block:
 
     with gr.Row():
         plot_3d = gr.HTML('<iframe width="100%" height="800px" src="file=static/filler.html"></iframe>',label="3D Plot",elem_classes="plot3d")
-        
-    # with gr.Row():
-        # plot_3d_anim = gr.HTML('<img src="file=static/filler.gif" width="100%">',label="3D Animation")
     
     event1 = btn_submit.click(lambda: [None]*4 + [gr.update(interactive=False)]*8, outputs=[candidate_plt,mechanism_plot,og_plt,smooth_plt,btn_submit, n_freq, maximum_joint_count, time_steps, top_n, init_optim_iters, top_n_level2, BFGS_max_iter], concurrency_limit=1)
     event2 = event1.then(create_synthesizer, inputs=[n_freq, maximum_joint_count, time_steps, top_n, init_optim_iters, top_n_level2, BFGS_max_iter], outputs=[syth], concurrency_limit=1)
     event3 = event2.then(lambda s,x,p: s.demo_sythesize_step_1(np.array([eval(i) for i in x.split(',')]).reshape([-1,2]) * [[1,-1]],partial=p), inputs=[syth,canvas,partial],js="(s,x,p) => [s,path.toString(),p]",outputs=[state,og_plt,smooth_plt], concurrency_limit=1)
     event4 = event3.then(lambda sy,s: sy.demo_sythesize_step_2(s), inputs=[syth,state], outputs=[state,candidate_plt], concurrency_limit=1)
     event5 = event4.then(lambda sy,s: sy.demo_sythesize_step_3(s,progress=gr.Progress()), inputs=[syth,state], outputs=[mechanism_plot,state,progl], concurrency_limit=1)
-    event6 = event5.then(make_cad, inputs=[state], outputs=[plot_3d], concurrency_limit=1)
-    # event7 = event6.then(make_3D_animation, inputs=[state], outputs=[plot_3d_anim])
+    event6 = event5.then(make_cad, inputs=[state,partial], outputs=[plot_3d], concurrency_limit=1)
     event8 = event6.then(lambda: [gr.update(interactive=True)]*8, outputs=[btn_submit, n_freq, maximum_joint_count, time_steps, top_n, init_optim_iters, top_n_level2, BFGS_max_iter], concurrency_limit=1)
     block.load()
     
