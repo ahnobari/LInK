@@ -20,4 +20,4 @@ TestData/*.npy
 
 # Ignore Experiments
 *_experimental*
-static/
+static/*-*.html

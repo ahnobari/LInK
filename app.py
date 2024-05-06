@@ -78,7 +78,7 @@ def make_cad(synth_out, partial, progress=gr.Progress(track_tqdm=True)):
     
     return gr.HTML(f'<iframe width="100%" height="800px" src="file={args.static_folder}/{f_name}.html"></iframe>',label="3D Plot",elem_classes="plot3d")
 
-gr.set_static_paths(paths=[Path('./static')])
+gr.set_static_paths(paths=[Path(f'./{args.static_folder}')])
 
 with gr.Blocks(css=css, js=draw_script) as block:
     
