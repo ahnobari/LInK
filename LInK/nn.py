@@ -12,7 +12,10 @@ def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='chec
     gdown.download(id=id, output=f'{checkpoint_folder}/{checkpoint_name}', quiet=False)
     gdown.download(id=id_cpu, output=f'{checkpoint_folder}/{checkpoint_name.replace('.','CPU.')}', quiet=False)
     
-
+def download_emdedding(embeddings_folder = './Embeddings', id='1sFYrccXSFVRTojhmPKWa7yIpkGENYcDu'):
+    import gdown
+    gdown.download(id=id, output=f'{embeddings_folder}/embeddings.npy', quiet=False)
+    
 class GraphHop(nn.Module):
     def __init__(self, num_node_features = 5, hidden_dim = 768, embedding_dim = 512, num_layers= 16, num_attn_heads=8):
         super(GraphHop, self).__init__()
