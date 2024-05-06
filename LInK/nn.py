@@ -7,9 +7,10 @@ import numpy as np
 from .DataUtils import prep_curves
 from tqdm import tqdm, trange
 
-def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='checkpoint.LInK', id='1vEeAahZ6iivoYLDeHiLN-rrAgA33bq5k'):
+def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='checkpoint.LInK', id='1JINtDt7aXtd6FTWBgkKhdLxV2Nm6nia5', id_cpu="1WRgCkHVCz08h4zSughLDYKC8ATAubv8U"):
     import gdown
     gdown.download(id=id, output=f'{checkpoint_folder}/{checkpoint_name}', quiet=False)
+    gdown.download(id=id_cpu, output=f'{checkpoint_folder}/{checkpoint_name.replace('.','CPU.')}', quiet=False)
     
 
 class GraphHop(nn.Module):
