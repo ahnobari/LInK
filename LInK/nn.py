@@ -10,7 +10,8 @@ from tqdm import tqdm, trange
 def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='checkpoint.LInK', id='1JINtDt7aXtd6FTWBgkKhdLxV2Nm6nia5', id_cpu="1WRgCkHVCz08h4zSughLDYKC8ATAubv8U"):
     import gdown
     gdown.download(id=id, output=f'{checkpoint_folder}/{checkpoint_name}', quiet=False)
-    gdown.download(id=id_cpu, output=f'{checkpoint_folder}/{checkpoint_name.replace('.','CPU.')}', quiet=False)
+    cpu_name = checkpoint_name.replace('.','CPU.')
+    gdown.download(id=id_cpu, output=f'{checkpoint_folder}/{cpu_name}', quiet=False)
     
 def download_emdedding(embeddings_folder = './Embeddings', id='1sFYrccXSFVRTojhmPKWa7yIpkGENYcDu'):
     import gdown
