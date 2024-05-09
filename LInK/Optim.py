@@ -496,7 +496,7 @@ class PathSynthesis:
         transformation = [tr.cpu().numpy(),sc.cpu().numpy(),an.cpu().numpy()]
         start_theta = st_theta
         end_theta = en_theta
-        performance = [CD.item()*og_scale,OD.item()*(og_scale**2)]
+        performance = [CD.item()*og_scale,OD.item()*(og_scale**2),og_scale]
         
         return [A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve
         # return As[best_idx].cpu().numpy(), x[best_idx].cpu().numpy(), node_types[best_idx].cpu().numpy(), [tr,sc,an], transformed_curve, best_matches[0].detach().cpu().numpy(), [CD.item()*og_scale,OD.item()*og_scale**2]
