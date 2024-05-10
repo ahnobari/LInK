@@ -1,10 +1,6 @@
 import numpy as np
 from .Solver import solve_rev_vectorized_batch_CPU
-from scipy.optimize import milp, LinearConstraint
-import pyvista as pv
 from tqdm import trange
-import uuid
-import os
 import gurobipy as gp
 
 def onSegment(p, q, r): 
@@ -202,83 +198,6 @@ def get_layers_relaxed(A_, x0_, node_types_, sol_, verbose=True, relax_groud = F
             current_z += 1
         
     return z_index
-
-def plot_config_3D(A,x0,nt,z_index, curve, h_joints=[], p = None):
-    n_joints = (A.sum(-1)>0).sum()
-    A = A[:n_joints,:][:,:n_joints]
-    x0 = x0[:n_joints]
-    nt = nt[:n_joints]
-    n_links = int(A.sum()/2)
-    if p is None:
-        p = pv.Plotter()
-    l1,l2 = np.where(np.triu(A))
-    
-    for j in range(n_links):
-        length= np.linalg.norm(x0[l1[j]]-x0[l2[j]])
-        link_mesh = pv.Box([0,length,-0.05,0.05,0.0,0.05*0.95])
-        angle = np.arctan2(x0[l2[j]][1]-x0[l1[j]][1],x0[l2[j]][0]-x0[l1[j]][0])
-        link_mesh = link_mesh.rotate_z(angle*180/np.pi)
-        link_mesh = link_mesh.translate(np.pad(x0[l1[j]],(0,1),constant_values=z_index[j]*0.05))
-        color = '99A3A3'
-        # color = plt.cm.RdGy(z_index[j]/z_index.max()*0.8)
-        p.add_mesh(link_mesh, color=color, opacity=0.7)
-        cap1 = pv.Cylinder(center=[x0[l1[j]][0],x0[l1[j]][1],z_index[j]*0.05+0.05/2], direction=(0,0,1), radius=0.05, height=0.05*0.95)
-        cap2 = pv.Cylinder(center=[x0[l2[j]][0],x0[l2[j]][1],z_index[j]*0.05+0.05/2], direction=(0,0,1), radius=0.05, height=0.05*0.95)
-        p.add_mesh(cap1, color=color, opacity=0.7)
-        p.add_mesh(cap2, color=color, opacity=0.7)
-        
-    #plot joints
-    joints_max_z = np.zeros(x0.shape[0])
-    joints_min_z = np.zeros(x0.shape[0]) + np.inf
-    
-    for i in range(n_links):
-        joints_max_z[l1[i]] = max(joints_max_z[l1[i]],z_index[i])
-        joints_max_z[l2[i]] = max(joints_max_z[l2[i]],z_index[i])
-        joints_min_z[l1[i]] = min(joints_min_z[l1[i]],z_index[i])
-        joints_min_z[l2[i]] = min(joints_min_z[l2[i]],z_index[i])
-
-    for i in range(x0.shape[0]):
-        if joints_min_z[i] != np.inf:
-            joint_mesh = pv.Cylinder(center=[x0[i][0],x0[i][1],(joints_min_z[i] + joints_max_z[i])/2 * 0.05 + 0.05/2], direction=(0,0,1), radius=0.030, height=(joints_max_z[i]-joints_min_z[i]+1)*0.05+0.005)
-            if i in h_joints:
-                p.add_mesh(joint_mesh, color='c91100')
-            else:
-                p.add_mesh(joint_mesh, color='Black')
-    
-    for i,c in enumerate(curve):
-        p.add_mesh(pv.MultipleLines(np.pad(c,[[0,0],[0,1]],constant_values=0.05*joints_max_z[h_joints[i]]+0.05+0.005)), color='c91100', line_width=5)
-        
-    return p
-
-def plot_3D_animation(A,x0,nt,z_index,curve,h_joints, sol=None, start=0,end=2*np.pi,steps=50, file='animation.gif'):
-    p = pv.Plotter(window_size=(2000, 2000))
-    if sol is None:
-        sol = solve_rev_vectorized_batch_CPU(np.expand_dims(A,0),np.expand_dims(x0,0),np.expand_dims(nt,0),np.linspace(start,end,steps))[0]
-        sol = np.transpose(sol,(1,0,2))
-    p = plot_config_3D(A,sol[0],nt,z_index,curve,h_joints,p)
-    # c = sol.mean(0).mean(0)
-    p.view_xy()
-    p.camera.position = (p.camera.position[0], p.camera.position[1]-3.5, p.camera.position[2])
-    cam = p.camera.copy()
-    p.open_gif(file,loop=True)
-    
-    for i in trange(sol.shape[0]):
-        p.clear()
-        p = plot_config_3D(A,sol[i],nt,z_index,curve,h_joints,p)
-        p.camera = cam
-        p.write_frame()
-    p.close()
-    
-def get_html(plotter):
-    f_id = str(uuid.uuid4())
-    plotter.export_html(f'{f_id}.html')
-    
-    # read the text in html file
-    with open(f'{f_id}.html', 'r') as file:
-        data = file.read()
-        
-    os.remove(f'{f_id}.html')
-    return data
 
 def get_3d_config(A,x0,nt,z_index):
     
