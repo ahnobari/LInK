@@ -12,17 +12,20 @@ from scipy.interpolate import CubicSpline
 import time
 import gradio as gr
 
-def cosine_search(target_emb, atlas_emb, max_batch_size = 1000000):
+def cosine_search(target_emb, atlas_emb, max_batch_size = 1000000, ids = None):
 
     z = nn.functional.normalize(target_emb.unsqueeze(0).tile([max_batch_size,1]))
 
+    if ids is None:
+        ids = torch.arange(atlas_emb.shape[0]).to(target_emb.device).long()
+    
     sim = []
-    for i in range(int(np.ceil(atlas_emb.shape[0]/max_batch_size))):
-        z1 = atlas_emb[i*max_batch_size:(i+1)*max_batch_size]
+    for i in range(int(np.ceil(ids.shape[0]/max_batch_size))):
+        z1 = atlas_emb[ids[i*max_batch_size:(i+1)*max_batch_size]]
         sim.append(nn.functional.cosine_similarity(z1,z[0:z1.shape[0]]))
     sim = torch.cat(sim,0)
 
-    return(-sim).argsort(), sim
+    return ids[(-sim).argsort()], sim
 
 def batch_chamfer_distance(c1,c2):
     
@@ -222,7 +225,7 @@ def demo_progress_updater(x, prog=None, desc = ''):
         prog(x[0], desc=desc + f'Current Best CD: {x[1]:.7f}')
 
 class PathSynthesis:
-    def __init__(self, trainer_instance, curves, As, x0s, node_types, precomputed_emb=None, optim_timesteps=2000, top_n = 300, init_optim_iters = 10, top_n_level2 = 30, CD_weight = 1.0, OD_weight = 0.25, BFGS_max_iter = 100, n_repos=1, BFGS_lineserach_max_iter=10, BFGS_line_search_mult = 0.5, butterfly_gen=200, butterfly_pop=200, curve_size = 200, smoothing = True, n_freq = 5, device = None):
+    def __init__(self, trainer_instance, curves, As, x0s, node_types, precomputed_emb=None, optim_timesteps=2000, top_n = 300, init_optim_iters = 10, top_n_level2 = 30, CD_weight = 1.0, OD_weight = 0.25, BFGS_max_iter = 100, n_repos=1, BFGS_lineserach_max_iter=10, BFGS_line_search_mult = 0.5, butterfly_gen=200, butterfly_pop=200, curve_size = 200, smoothing = True, n_freq = 5, device = None, sizes = None):
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
@@ -253,8 +256,13 @@ class PathSynthesis:
         self.CD_weight = CD_weight
         self.OD_weight = OD_weight
         self.n_repos = n_repos
+        
+        if sizes is not None:
+            self.sizes = sizes
+        else:
+            self.sizes = (As.sum(-1)>0).sum(-1)
     
-    def synthesize(self, target_curve, verbose=True, visualize=True, partial=False):
+    def synthesize(self, target_curve, verbose=True, visualize=True, partial=False, max_size=20):
         
         start_time = time.time()
         
@@ -337,7 +345,8 @@ class PathSynthesis:
         target_emb = self.models.compute_embeddings_input(input_tensor, 1000)[0]
         target_emb = torch.tensor(target_emb).float().to(self.device)
         
-        idxs, sim = cosine_search(target_emb, self.precomputed_emb)
+        ids = np.where(self.sizes <= max_size)[0]
+        idxs, sim = cosine_search(target_emb, self.precomputed_emb,ids=ids)
         idxs = idxs.detach().cpu().numpy()
         
         if verbose:
@@ -582,7 +591,7 @@ class PathSynthesis:
         
         return payload, fig1, fig2
     
-    def demo_sythesize_step_2(self, payload):
+    def demo_sythesize_step_2(self, payload, max_size=20):
         target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial, size = payload
         
         input_tensor = target_curve.unsqueeze(0)
@@ -591,7 +600,8 @@ class PathSynthesis:
         target_emb = self.models.compute_embeddings_input(input_tensor, 1000)[0]
         target_emb = torch.tensor(target_emb).float().to(self.device)
         
-        idxs, sim = cosine_search(target_emb, self.precomputed_emb)
+        ids = torch.tensor(np.where(self.sizes <= max_size)[0]).to(self.device).long()
+        idxs, sim = cosine_search(target_emb, self.precomputed_emb, ids=ids)
         idxs = idxs.detach().cpu().numpy()
         
         #max batch size is 250
@@ -709,8 +719,9 @@ class PathSynthesis:
             st_theta = 0.
             en_theta = np.pi*2
         
+        n_joints = (As[best_idx].sum(-1)>0).sum().cpu().numpy()
         fig, ax = plt.subplots(1,1,figsize=(10,10))
-        ax = draw_mechanism(As[best_idx].cpu().numpy(),x[best_idx].cpu().numpy(),np.where(node_types[best_idx].cpu().numpy())[0],[0,1],highlight=tid[0].item(),solve=True, thetas=np.linspace(st_theta,en_theta,self.optim_timesteps),ax=ax)
+        ax = draw_mechanism(As[best_idx].cpu().numpy()[:n_joints,:][:,:n_joints],x[best_idx].cpu().numpy()[0:n_joints],np.where(node_types[best_idx].cpu().numpy()[0:n_joints])[0],[0,1],highlight=tid[0].item(),solve=True, thetas=np.linspace(st_theta,en_theta,self.optim_timesteps),ax=ax)
         ax.plot(transformed_curve[:,0], transformed_curve[:,1], color="indigo", alpha=0.7, linewidth=2)
         
         A = As[best_idx].cpu().numpy()

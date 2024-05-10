@@ -138,10 +138,10 @@ function make_joint(x, y, z, height, radius=0.03) {
             meshes.push(make_link(link[0], link[1], link[2], link[3], link[4], link[5]));
             if (i == 0){
                 //yellow
-                meshes[i].material = new THREE.MeshStandardMaterial({ color: 0xff8c00, opacity: 0.5, transparent: false , side: THREE.DoubleSide, depthWrite: true});
+                meshes[i].material = new THREE.MeshStandardMaterial({ color: 0xff8c00, opacity: 0.5, transparent: true , side: THREE.DoubleSide, depthWrite: true});
             }
             else
-                meshes[i].material = new THREE.MeshStandardMaterial({ color: 0x3b3b3b, opacity: 0.5, transparent: false , side: THREE.DoubleSide, depthWrite: true});
+                meshes[i].material = new THREE.MeshStandardMaterial({ color: 0x3b3b3b, opacity: 0.5, transparent: true , side: THREE.DoubleSide, depthWrite: true});
             scene.add(meshes[i]);
         }
         joint_meshes = []
