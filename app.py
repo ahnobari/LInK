@@ -1,8 +1,6 @@
 import os
 import uuid
-import pyvista as pv
 import argparse
-pv.start_xvfb()
 
 argparser = argparse.ArgumentParser()
 argparser.add_argument("--port", type=int, default=1238, help="Port number for the local server")
@@ -140,4 +138,4 @@ with gr.Blocks(css=css, js=draw_script) as block:
     
     clr_btn.click(lambda x: x, js='document.getElementById("sketch").innerHTML = ""')
     
-block.launch(server_port=1238,share=True,max_threads=200,inline=False)
+block.launch(server_port=args.port,share=True,max_threads=200,inline=False)
