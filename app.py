@@ -15,7 +15,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
 import gradio as gr
 from LInK.demo import draw_html, draw_script, css
 from LInK.Solver import solve_rev_vectorized_batch_CPU
-from LInK.CAD import get_layers, plot_config_3D, plot_3D_animation, create_3d_html
+from LInK.CAD import get_layers, create_3d_html
 from LInK.Optim import PathSynthesis
 from pathlib import Path
 

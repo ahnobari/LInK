@@ -256,24 +256,31 @@ def get_3d_config(A,x0,nt,z_index):
         else:
             joints.append(x0[i].tolist()+[float(joints_max_z[i]-joints_min_z[i])+0.05,float(joints_min_z[i]+joints_max_z[i])/2,0])
 
-    return [linkages, joints], joints_max_z[-1], scale
+    return [linkages, joints], joints_max_z, scale
 
-def get_animated_3d_config(A,x0,nt,z_index,sol):
+def get_animated_3d_config(A,x0,nt,z_index,sol, highlights = [-1]):
     A, x0, nt, z_index, sol = np.array(A), np.array(x0), np.array(nt), np.array(z_index), np.array(sol)
     configs = []
     for i in range(sol.shape[1]):
         c,z,s = get_3d_config(A,sol[:,i,:],nt,z_index)
         configs.append(c)
     
-    highligh_curve = np.pad(sol[-1,:,:]*s,[[0,0],[0,1]],constant_values=z+0.025)
+    if len(highlights) > 1:
+        highligh_curve = []
+        for i in highlights:
+            highligh_curve.append(np.pad(sol[i,:,:]*s,[[0,0],[0,1]],constant_values=z[i]+0.025))
+        highligh_curve = np.array(highligh_curve)
+    else:
+        highligh_curve = np.pad(sol[highlights[0],:,:]*s,[[0,0],[0,1]],constant_values=z[-1]+0.025)
 
     return configs, highligh_curve.tolist()
 
-def create_3d_html(A,x0,nt,z_index,sol, template_path='./static/animation.htm', save_path='./static/animated.html'):
+def create_3d_html(A,x0,nt,z_index,sol, template_path='./static/animation.htm', save_path='./static/animated.html', highlights = [-1]):
     
-    res,hc = get_animated_3d_config(A,x0,nt,z_index,sol)
+    res,hc = get_animated_3d_config(A,x0,nt,z_index,sol,highlights=highlights)
     js_var = 'window.res = ' + str(res) + ';\n'
     js_var += 'window.hc = ' + str(hc) + ';'
+    js_var += 'window.multi_high = ' + str(int(len(highlights)>1)) + ';'
     
     with open(template_path, 'r') as file:
         filedata = file.read()

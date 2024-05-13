@@ -14,9 +14,11 @@ import {CSG} from "./threecsg.js"
 
 var res = window.res;
 var hc = window.hc;
+var multi_high = window.multi_high;
 var current_frame = 0;
 var meshes = [];
 var joint_meshes = [];
+
 function make_linkage(x_length, y_length, z_length, hole_r) {
     var link = new THREE.BoxGeometry( x_length, y_length, z_length );
     var end_1 = new THREE.CylinderGeometry(y_length/2, y_length/2, z_length, 32);
@@ -58,6 +60,7 @@ function make_joint(x, y, z, height, radius=0.03) {
 (async function onLoad() {
     var res = window.res;
     var hc = window.hc;
+    var multi_high = window.multi_high;
     // find the mean value of the res array
     var max_x = 0;
     var max_y = 0;
@@ -102,7 +105,7 @@ function make_joint(x, y, z, height, radius=0.03) {
         scene.background = new THREE.Color(0xfafafa);
         
         camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 10000);
-        camera.position.set(mean_x,mean_y, -10);
+        camera.position.set(mean_x,mean_y, 20);
         scene.add(camera);
         window.onresize = function() {
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -155,29 +158,70 @@ function make_joint(x, y, z, height, radius=0.03) {
             scene.add(joint_meshes[i]);
         }
 
-        var points = [];
-        var colors = []
-        for (let i = 0; i <hc.length; i++) {
-            points.push(hc[i][0], hc[i][1], hc[i][2]);
+        if (multi_high) {
+            var n = hc.length;
+
+            for (let j = 0; j < n; j++) {
+                var points = [];
+                var colors = [];
+                for (let i = 0; i <hc[j].length; i++) {
+                    points.push(hc[j][i][0], hc[j][i][1], hc[j][i][2]);
+                }
+                
+                var geometry = new LineGeometry();
+                geometry.setPositions( points );
+                var material = new LineMaterial( {
+                    color: 0xff4c00,
+                    linewidth: 0.002, // in world units with size attenuation, pixels otherwise
+                    vertexColors: false,
+
+                    //resolution:  // to be set by renderer, eventually
+                    dashed: false,
+                    alphaToCoverage: false,
+                    depthWrite: false,
+                    depthTest: false,
+                    transparent: true,
+
+                });
+                material.worldUnits = false;
+                const line = new Line2(geometry, material);
+                line.computeLineDistances();
+                line.scale.set( 1, 1, 1 );
+                line.renderOrder= 9999;
+                scene.add(line);
+            }
         }
+        else{
+            var points = [];
+            var colors = [];
+            for (let i = 0; i <hc.length; i++) {
+                points.push(hc[i][0], hc[i][1], hc[i][2]);
+            }
+            
+            var geometry = new LineGeometry();
+            geometry.setPositions( points );
+            var material = new LineMaterial( {
+                color: 0xff4c00,
+                linewidth: 0.002, // in world units with size attenuation, pixels otherwise
+                vertexColors: false,
+
+                //resolution:  // to be set by renderer, eventually
+                dashed: false,
+                alphaToCoverage: false,
+                depthWrite: false,
+                depthTest: false,
+                transparent: true,
+
+            });
+            material.worldUnits = false;
+            const line = new Line2(geometry, material);
+            line.computeLineDistances();
+            line.scale.set( 1, 1, 1 );
+            line.renderOrder= 9999;
+            scene.add(line);
+        }
+
         
-        var geometry = new LineGeometry();
-		geometry.setPositions( points );
-        var material = new LineMaterial( {
-            color: 0xff4c00,
-            linewidth: 0.002, // in world units with size attenuation, pixels otherwise
-            vertexColors: false,
-
-            //resolution:  // to be set by renderer, eventually
-            dashed: false,
-            alphaToCoverage: false,
-
-        } );
-        material.worldUnits = false;
-        const line = new Line2(geometry, material);
-        line.computeLineDistances();
-		line.scale.set( 1, 1, 1 );
-        scene.add(line);
     }
   
     function addGridHelper() {
@@ -222,6 +266,7 @@ function make_joint(x, y, z, height, radius=0.03) {
     }
   
     function render() {
+      renderer.clearDepth();
       renderer.render(scene, camera);
     }
   })();
