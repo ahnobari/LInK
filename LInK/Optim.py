@@ -737,7 +737,7 @@ class PathSynthesis:
         transformation = [tr.cpu().numpy(),sc.cpu().numpy(),an.cpu().numpy()]
         start_theta = st_theta
         end_theta = en_theta
-        performance = [CD.item()*og_scale,OD.item()*(og_scale**2)]
+        performance = [CD.item().cpu().numpy()*og_scale,OD.item().cpu().numpy()*(og_scale**2),og_scale.cpu().numpy()]
         torch.cuda.empty_cache()
         return fig, [[A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve], gr.update(value = {"Progress":1.0})
         
