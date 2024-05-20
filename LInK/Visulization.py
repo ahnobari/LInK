@@ -5,7 +5,7 @@ from io import StringIO
 import xml.etree.ElementTree as etree
 from svgpath2mpl import parse_path
 
-def draw_mechanism(A,x0,fixed_nodes=None,motor=[0,1],node_types=None, ax=None, highlight=None, solve=True, thetas = np.linspace(0,np.pi*2,200), def_alpha = 1.0, h_alfa =1.0, h_c = "#f15a24"):
+def draw_mechanism(A,x0,fixed_nodes=None,motor=[0,1],node_types=None, ax=None, highlight=None, solve=True, thetas = np.linspace(0,np.pi*2,200), def_alpha = 1.0, def_c = "#0078a7", h_alfa =1.0, h_c = "#f15a24"):
     
     if fixed_nodes is None and node_types is None:
         raise ValueError("Either fixed_nodes or node_types should be provided")
@@ -66,7 +66,7 @@ def draw_mechanism(A,x0,fixed_nodes=None,motor=[0,1],node_types=None, ax=None, h
                 if ord[i] == highlight:
                     ax.plot(x[i,:,0],x[i,:,1],'-',color=h_c,linewidth=4.5,alpha=h_alfa)
                 else:
-                    ax.plot(x[i,:,0],x[i,:,1],'--',color="#0078a7",linewidth=1.5, alpha=def_alpha)
+                    ax.plot(x[i,:,0],x[i,:,1],'--',color=def_c,linewidth=1.5, alpha=def_alpha)
     ax.axis('equal')
     ax.axis('off')
     
