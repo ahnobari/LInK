@@ -345,8 +345,8 @@ class PathSynthesis:
         target_emb = self.models.compute_embeddings_input(input_tensor, 1000)[0]
         target_emb = torch.tensor(target_emb).float().to(self.device)
         
-        ids = np.where(self.sizes <= max_size)[0]
-        idxs, sim = cosine_search(target_emb, self.precomputed_emb,ids=ids)
+        ids = torch.tensor(np.where(self.sizes <= max_size)[0]).to(self.device).long()
+        idxs, sim = cosine_search(target_emb, self.precomputed_emb, ids=ids)
         idxs = idxs.detach().cpu().numpy()
         
         if verbose:
@@ -505,7 +505,7 @@ class PathSynthesis:
         transformation = [tr.cpu().numpy(),sc.cpu().numpy(),an.cpu().numpy()]
         start_theta = st_theta
         end_theta = en_theta
-        performance = [CD.item().cpu().numpy()*og_scale,OD.item().cpu().numpy()*(og_scale**2),og_scale.cpu().numpy()]
+        performance = [CD.item()*og_scale.cpu().numpy(),OD.item()*(og_scale.cpu().numpy()**2),og_scale.cpu().numpy()]
         
         return [A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve
         # return As[best_idx].cpu().numpy(), x[best_idx].cpu().numpy(), node_types[best_idx].cpu().numpy(), [tr,sc,an], transformed_curve, best_matches[0].detach().cpu().numpy(), [CD.item()*og_scale,OD.item()*og_scale**2]
@@ -737,7 +737,7 @@ class PathSynthesis:
         transformation = [tr.cpu().numpy(),sc.cpu().numpy(),an.cpu().numpy()]
         start_theta = st_theta
         end_theta = en_theta
-        performance = [CD.item().cpu().numpy()*og_scale,OD.item().cpu().numpy()*(og_scale**2),og_scale.cpu().numpy()]
+        performance = [CD.item()*og_scale.cpu().numpy(),OD.item()*(og_scale.cpu().numpy()**2),og_scale.cpu().numpy()]
         torch.cuda.empty_cache()
         return fig, [[A,x,node_types, start_theta, end_theta, transformation], performance, transformed_curve], gr.update(value = {"Progress":1.0})
         
