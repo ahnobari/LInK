@@ -118,6 +118,35 @@ class GCNBaseline(nn.Module):
         x = self.fc(x) # x: [num_graphs, embedding_dim]
         return x
 
+class GINBaseline(nn.Module):
+    def __init__(self, num_node_features = 5, hidden_dim = 768, embedding_dim = 512, num_layers= 16, num_attn_heads=None):
+        super(GINBaseline, self).__init__()
+        self.projection = nn.Linear(num_node_features, hidden_dim)
+        self.convs = nn.ModuleList([
+            gnn.GINConv(nn.Sequential(
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU()
+            )) for _ in range(num_layers)
+        ])
+        self.fc = nn.Linear(hidden_dim, embedding_dim)
+        self.relu = nn.ReLU()
+        
+        self.num_layers = num_layers
+
+    def forward(self, x, edge_index, batch, target_idx = None):
+        x = self.projection(x) # x: [num_nodes, hidden_dim]
+        for i in range(self.num_layers):
+            x = self.convs[i](x, edge_index) # x: [num_nodes, hidden_dim]
+            x = self.relu(x) # x: [num_nodes, hidden_dim]
+        if target_idx is not None:
+            x = x[target_idx] # x: [num_graphs, hidden_dim]
+        else:
+            x = gnn.global_mean_pool(x, batch) # x: [num_graphs, hidden_dim]
+        x = self.fc(x) # x: [num_graphs, embedding_dim]
+        return x
+
 class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()
@@ -212,7 +241,7 @@ def Clip_loss(z_i,z_j, temperature = 0.07):
 
 class ContrastiveTrainLoop:
     def __init__(self, emb_size = 512, curve_size=200, lr = 1e-4, weight_decay=1e-4, cosine_schedule = True, lr_final=1e-5,
-                 schedule_max_steps = 100, num_node_features = 5, hidden_dim=768, num_layers=16, num_attn_heads=8, device = None, baseline = False):
+                 schedule_max_steps = 100, num_node_features = 5, hidden_dim=768, num_layers=16, num_attn_heads=8, device = None, baseline = None):
 
         if device is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -221,8 +250,12 @@ class ContrastiveTrainLoop:
         
         self.model_input = Constrastive_Curve(emb_size = emb_size).to(self.device)
         self.model_base = Constrastive_Curve(emb_size = emb_size).to(self.device)
-        if baseline:
+        if baseline == "GAT":
+            self.model_mechanism = GATBaseline(num_node_features=num_node_features, hidden_dim=hidden_dim * 2, num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
+        elif baseline == "GCN":
             self.model_mechanism = GCNBaseline(num_node_features=num_node_features, hidden_dim=hidden_dim * 2, num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
+        elif baseline == "GIN":
+            self.model_mechanism = GINBaseline(num_node_features=num_node_features, hidden_dim=int(hidden_dim * 1.5), num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
         else:
             self.model_mechanism = GraphHop(num_node_features=num_node_features, hidden_dim=hidden_dim, num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
         
