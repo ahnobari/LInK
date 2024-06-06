@@ -255,7 +255,7 @@ class ContrastiveTrainLoop:
         elif baseline == "GCN":
             self.model_mechanism = GCNBaseline(num_node_features=num_node_features, hidden_dim=hidden_dim * 2, num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
         elif baseline == "GIN":
-            self.model_mechanism = GINBaseline(num_node_features=num_node_features, hidden_dim=int(hidden_dim * 1.5), num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
+            self.model_mechanism = GINBaseline(num_node_features=num_node_features, hidden_dim=int(hidden_dim * 1.5) , num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
         else:
             self.model_mechanism = GraphHop(num_node_features=num_node_features, hidden_dim=hidden_dim, num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
         
