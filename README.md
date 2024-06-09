@@ -3,6 +3,8 @@ LInK is a novel framework that integrates contrastive learning of performance an
 
 [<img src="https://i.ibb.co/PCWxYQx/ezgif-7-d82a7b1fe9.gif" style="width:100%; max-width:1000px;"/>](https://ahn1376-linkalphabetdemo.hf.space/)
 
+[Simple Fun Alphabet Demo](https://ahn1376-linkalphabetdemo.hf.space/)
+
 ## Enviroment and Package Requirements
 To Run the code in this demo you will need to replicate the enviromnet we used. This information is available in `environment.yml` file.
 
