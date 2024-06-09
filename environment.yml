@@ -1,0 +1,33 @@
+name: LInK
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - tqdm
+  - matplotlib
+  - scipy
+  - numpy==1.23
+  - pandas
+  - seaborn
+  - scikit-learn
+  - ca-certificates
+  - openssl
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  - certifi
+  - cudatoolkit=11.8
+  - jupyter
+  - mpi4py
+  - nbconvert
+  - cadquery
+  - cq-editor=master
+  - scikit-sparse
+  - gradio
+  - opencv
+  - libgcc
+  - pyg
+  - ipygany
+  - torchdata
+prefix: /home/johnson/mambaforge/envs/topology

@@ -4,7 +4,7 @@ LInK is a novel framework that integrates contrastive learning of performance an
 [<img src="https://i.ibb.co/PCWxYQx/ezgif-7-d82a7b1fe9.gif" style="width:100%; max-width:1000px;"/>](https://ahn1376-linkalphabetdemo.hf.space/)
 
 ## Enviroment and Package Requirements
-To Run the code in this demo 
+To Run the code in this demo you will need to replicate the enviromnet we used. This information is available in `environment.yml` file.
 
 ## Data & Checkpoint
 You can run `Download.py` to automatically download all required data and checkpoint and precomputed embeddings that we use in the paper. Alternatively you can use the arguments in `Download.py` to alter which parts of the data and checkpoint and embeddings you need. Since these files are too large Google Drive may limit the direct download of the files which may lead to `gdown` failing. In this case please use the link below to manually download and add the data to the repo:
