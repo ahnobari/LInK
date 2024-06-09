@@ -262,7 +262,7 @@ class PathSynthesis:
         else:
             self.sizes = (As.sum(-1)>0).sum(-1)
     
-    def synthesize(self, target_curve, verbose=True, visualize=True, partial=False, max_size=20):
+    def synthesize(self, target_curve, verbose=True, visualize=True, partial=False, max_size=20, save_figs=None):
         
         start_time = time.time()
         
@@ -337,7 +337,11 @@ class PathSynthesis:
                 axs[1].set_title('Preprocessed Curve')
                 axs[1].axis('equal')
                 axs[1].axis('off')
-                plt.show()
+
+                if save_figs is not None:
+                    fig.savefig(save_figs + '_preprocessing.png')
+                else:
+                    plt.show()
         
         input_tensor = target_curve.unsqueeze(0)
         batch_padd = preprocess_curves(torch.tensor(self.curves[np.random.choice(self.curves.shape[0],255)]).float().to(self.device))
@@ -379,8 +383,12 @@ class PathSynthesis:
                             axs[i,j].plot(tiled_curves[tid][i*grid_size+j].cpu().numpy()[:,0],tiled_curves[tid][i*grid_size+j].cpu().numpy()[:,1],color="darkorange",alpha=0.7)
                         axs[i,j].axis('off')
                         axs[i,j].axis('equal')
-                        
-                plt.show()
+
+
+                if save_figs is not None:
+                    fig.savefig(save_figs + '_retrieved.png')
+                else:
+                    plt.show()
         
         As = torch.tensor(self.As[idxs[tid]]).float().to(self.device)
         x0s = torch.tensor(self.x0s[idxs[tid]]).float().to(self.device)
@@ -487,7 +495,11 @@ class PathSynthesis:
             ax = draw_mechanism(As[best_idx].cpu().numpy(),x[best_idx].cpu().numpy(),np.where(node_types[best_idx].cpu().numpy())[0],[0,1],highlight=tid[0].item(),solve=True, thetas=np.linspace(st_theta,en_theta,self.optim_timesteps))
             # ax.plot(best_matches[0].detach().cpu().numpy()[:,0],best_matches[0].detach().cpu().numpy()[:,1],color="darkorange")
             ax.plot(transformed_curve[:,0], transformed_curve[:,1], color="indigo", alpha=0.7, linewidth=2)
-            plt.show()
+
+            if save_figs is not None:
+                fig.savefig(save_figs + '_final_candidate.png')
+            else:
+                plt.show()
         
         if verbose:
             print(f'Final Chamfer Distance: {CD.item()*og_scale:.7f}, Ordered Distance: {OD.item()*(og_scale**2):.7f}')

@@ -111,15 +111,15 @@ def prep_curves(curves, n, fourier=False):
 
 def download_data(data_folder='./Data/', test_folder='./TestData/'):
     import gdown
-    x0_id = '1vwEwUnLD76OnkORhhKyGsjG43T5Zm95F'
-    connectivity_id = '1ejU9Rkn-WVGUn7ZfUYs9MYko2uaivGvP'
+    x0_id = '1HEHhSGQS029LJTMPbeKzduuh1qVns4a2'
+    connectivity_id = '1Tc4l8288oa_RfOWfnAmNQYAN9R2FZBpc'
     graphs_id = '1Arr36z0VbLEHbPImXUOs3QEvjl_7weGe'
-    node_types_id = '1OEVlqH1x_pThFnUZ4W3jmO4EtNrmUF4v'
-    target_curves_id = '1MUHgeQTIxclozb3Xnmz_O4aZnreVMNoT'
+    node_types_id = '15-2MTlm26l2xO6ZMai3zlplSkjwWSSDC'
+    target_curves_id = '1BbE8FTWqSUUCmuff6iofgrP3vwPEN90n'
     
-    random_mechanisms_test_id = '1xmr-UwvxSR3PpjvEALhWoY_x9kyT4jMe'
-    alphabet_test_id = '1Y9-FSQU0YHd1_F0rPUT6WiPcV590jbYJ'
-    gcp_micp_test_id = '1Hk_IIKYsQQKS83fr60m35OwxOe-YUbq_'
+    random_mechanisms_test_id = '1n0PFrQazIaKyALoWFVyQ4TwlS_Q11W4n'
+    alphabet_test_id = '14iT6lk78O_VY7up86sO_4sdxZ7CPEJXc'
+    gcp_micp_test_id = '1pURHa_ztAISMjRusR6HSHlEEa8RK_Au8'
     
     gdown.download(id=x0_id, output=data_folder+'x0.npy', quiet=False)
     gdown.download(id=connectivity_id, output=data_folder+'connectivity.npy', quiet=False)

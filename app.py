@@ -6,6 +6,10 @@ argparser = argparse.ArgumentParser()
 argparser.add_argument("--port", type=int, default=1238, help="Port number for the local server")
 argparser.add_argument("--cuda_device", type=str, default='0', help="Cuda devices to use. Default is 0")
 argparser.add_argument("--static_folder", type=str, default='static', help="Folder to store static files")
+argparser.add_argument('--checkpoint_folder', type=str, default='./Checkpoints/', help='The folder to store the checkpoint')
+argparser.add_argument('--checkpoint_name', type=str, default='checkpoint.LInK', help='The name of the checkpoint file')
+argparser.add_argument('--data_folder', type=str, default='./Data/', help='The folder to store the data')
+argparser.add_argument('--embedding_folder', type=str, default='./Embeddings/', help='The folder to store the embeddings')
 args = argparser.parse_args()
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
@@ -31,24 +35,35 @@ if not Path(args.static_folder).exists():
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# Load the checkpoint
+if not os.path.exists(args.checkpoint_folder) or not os.path.exists(os.path.join(args.checkpoint_folder, args.checkpoint_name)):
+    raise ValueError('The checkpoint file does not exist please run Download.py to download the checkpoints or provide the correct path.')
+
 # load the model
 if device == 'cpu':
-    with open('./Checkpoints/checkpointCPU.LInK', 'rb') as f:
+    with open(os.path.join(args.checkpoint_folder, args.checkpoint_name), 'rb') as f:
         Trainer = pickle.load(f)
 else:
-    with open('./Checkpoints/checkpoint.LInK', 'rb') as f:
+      with open(os.path.join(args.checkpoint_folder, args.checkpoint_name), 'rb') as f:
         Trainer = pickle.load(f)
         
 Trainer.model_base = Trainer.model_base.to('cpu')
 Trainer.model_mechanism = Trainer.model_mechanism.to('cpu')
-  
+
+
 # load data
-emb  = np.load('./Embeddings/embeddings.npy')[0:2000000]
+if not os.path.exists(args.data_folder) or not os.path.exists(os.path.join(args.data_folder, 'target_curves.npy')) or not os.path.exists(os.path.join(args.data_folder, 'connectivity.npy')) or not os.path.exists(os.path.join(args.data_folder, 'x0.npy')) or not os.path.exists(os.path.join(args.data_folder, 'node_types.npy')):
+    raise ValueError('All or some of the data does not exist please run Download.py to download the data or provide the correct path.')
+
+if not os.path.exists(args.embedding_folder) or not os.path.exists(os.path.join(args.embedding_folder, 'embeddings.npy')):
+    raise ValueError('The embedding file does not exist please run Download.py to download the embedding file or run Precompute.py to recompute them or provide the correct path.')
+
+emb  = np.load(os.path.join(args.embedding_folder, 'embeddings.npy'))[0:2000000]
 emb = torch.tensor(emb).float().to(device)
-As = np.load('./Data/connectivity.npy')[0:2000000]
-x0s = np.load('./Data/x0.npy')[0:2000000]
-node_types = np.load('./Data/node_types.npy')[0:2000000]
-curves = np.load('./Data/target_curves.npy')[0:2000000]
+As = np.load(os.path.join(args.data_folder, 'connectivity.npy'))[0:2000000]
+x0s = np.load(os.path.join(args.data_folder, 'x0.npy'))[0:2000000]
+node_types = np.load(os.path.join(args.data_folder, 'node_types.npy'))[0:2000000]
+curves = np.load(os.path.join(args.data_folder, 'target_curves.npy'))[0:2000000]
 sizes = (As.sum(-1)>0).sum(-1)
 
 torch.cuda.empty_cache()
@@ -77,6 +92,7 @@ def make_cad(synth_out, partial, progress=gr.Progress(track_tqdm=True)):
     return gr.HTML(f'<iframe width="100%" height="800px" src="file={args.static_folder}/{f_name}.html"></iframe>',label="3D Plot",elem_classes="plot3d")
 
 gr.set_static_paths(paths=[Path(f'./{args.static_folder}')])
+
 
 with gr.Blocks(css=css, js=draw_script) as block:
     
