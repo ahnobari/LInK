@@ -1,33 +1,30 @@
 name: LInK
 channels:
+  - pytorch
+  - pyg
+  - dglteam/label/th21_cu121
+  - nvidia
+  - cadquery
   - conda-forge
 dependencies:
-  - python=3.10
-  - tqdm
-  - matplotlib
-  - scipy
-  - numpy==1.23
-  - pandas
-  - seaborn
-  - scikit-learn
-  - ca-certificates
-  - openssl
-  - pytorch
-  - torchvision
-  - torchaudio
+  - gradio=4.37.1
+  - gradio-client=1.0.2
+  - matplotlib=3.8.4
+  - matplotlib-base=3.8.4
+  - matplotlib-inline=0.1.7
+  - numpy=1.26.4
+  - numpydoc=1.7.0
+  - scipy=1.14.0
   - pytorch-cuda=12.1
-  - certifi
-  - cudatoolkit=11.8
-  - jupyter
-  - mpi4py
-  - nbconvert
-  - cadquery
-  - cq-editor=master
-  - scikit-sparse
-  - gradio
-  - opencv
-  - libgcc
-  - pyg
-  - ipygany
-  - torchdata
-prefix: /home/johnson/mambaforge/envs/topology
+  - pytorch-mutex=1.0
+  - torchaudio=2.1.1
+  - torchdata=0.7.1
+  - torchvision=0.16.1
+  - pyg=2.4.0
+  - tqdm=4.66.4
+  - pip:
+      - gdown==5.1.0
+      - gurobipy==11.0.0
+      - svgpath2mpl==1.0.0
+      - torch==2.3.0
+      - pytorch-minimize==0.0.2
