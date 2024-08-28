@@ -99,6 +99,7 @@ function test(){
         }
         
         document.getElementById("sketch").addEventListener("touchstart", (e) => {
+          document.getElementById("sketch").innerHTML = "";
           var bcr = e.target.getBoundingClientRect();
           disableScroll();
           path = [];
@@ -130,6 +131,7 @@ function test(){
         });
 
         document.getElementById("sketch").addEventListener("mousedown", (e) => {
+          document.getElementById("sketch").innerHTML = ""
           path = [];
           lastEvent = e;
           path_start = e;
@@ -164,4 +166,8 @@ div:has(>.clr_btn) {max-width: 350px !important}
 # .prog .output-class{display:none !important;}
 # .prog .confidence-set{margin-top:10px;}
 .plotpad{padding-top: 15px;}
+
+.intro p{
+  font-size: 1.2em;
+}
 """

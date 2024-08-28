@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import jax.numpy as jnp
 
 # Dyadic Solution Path Finder
 def find_path(A, motor = [0,1], fixed_nodes=[0, 1]):
@@ -155,6 +156,66 @@ def solve_rev_vectorized_batch_CPU(As,x0s,node_types,thetas):
 
         x_k = np.expand_dims(x_k,1)
         x_k = np.pad(x_k,[[0,0],[k,x0s.shape[1]-k-1],[0,0],[0,0]],mode='constant')
+        
+        x += x_k
+    return x
+
+def solve_rev_vectorized_batch_jax(As,x0s,node_types,thetas):
+    
+    Gs = jnp.square((jnp.expand_dims(x0s,1) - jnp.expand_dims(x0s,2))).sum(-1)
+    
+    x = jnp.zeros([x0s.shape[0],x0s.shape[1],thetas.shape[0],2])
+    
+    x = x + jnp.expand_dims(node_types * x0s,2)
+    
+    m = x[:,0] + jnp.tile(jnp.expand_dims(jnp.swapaxes(jnp.concatenate([jnp.expand_dims(jnp.cos(thetas),0),jnp.expand_dims(jnp.sin(thetas),0)],0),0,1),0),[x0s.shape[0],1,1]) * jnp.expand_dims(jnp.expand_dims(jnp.sqrt(Gs[:,0,1]),-1),-1)
+
+    m = jnp.expand_dims(m,1)
+    m = jnp.pad(m,[[0,0],[1,x0s.shape[1]-2],[0,0],[0,0]],mode='constant')
+    x += m
+    
+    for k in range(3,x0s.shape[1]):
+        
+        inds = jnp.argsort(As[:,k,0:k])[:,-2:]
+        
+        l_ijs = jnp.linalg.norm(x[jnp.arange(x0s.shape[0]),inds[:,0]] - x[jnp.arange(x0s.shape[0]),inds[:,1]], axis=-1)
+        
+        gik = jnp.sqrt(jnp.expand_dims(Gs[jnp.arange(x0s.shape[0]),inds[:,0],jnp.ones(shape=[x0s.shape[0]],dtype=int)*k],-1))
+        gjk = jnp.sqrt(jnp.expand_dims(Gs[jnp.arange(x0s.shape[0]),inds[:,1],jnp.ones(shape=[x0s.shape[0]],dtype=int)*k],-1))
+        
+        cosphis = (jnp.square(l_ijs) + jnp.square(gik) - jnp.square(gjk))/(2 * l_ijs * gik)
+        
+        cosphis = jnp.where(jnp.tile(node_types[:,k],[1,thetas.shape[0]])==0.0,cosphis,jnp.zeros_like(cosphis))
+                             
+        x0i1 = x0s[jnp.arange(x0s.shape[0]),inds[:,0],jnp.ones(shape=[x0s.shape[0]]).astype(jnp.int32)]
+        x0i0 = x0s[jnp.arange(x0s.shape[0]),inds[:,0],jnp.zeros(shape=[x0s.shape[0]]).astype(jnp.int32)]
+        
+        x0j1 = x0s[jnp.arange(x0s.shape[0]),inds[:,1],jnp.ones(shape=[x0s.shape[0]]).astype(jnp.int32)]
+        x0j0 = x0s[jnp.arange(x0s.shape[0]),inds[:,1],jnp.zeros(shape=[x0s.shape[0]]).astype(jnp.int32)]
+        
+        x0k1 = x0s[:,k,1]
+        x0k0 = x0s[:,k,0]
+        
+        s = jnp.expand_dims(jnp.sign((x0i1-x0k1)*(x0i0-x0j0) - (x0i1-x0j1)*(x0i0-x0k0)),-1)
+        
+
+        phi = s * jnp.arccos(cosphis)
+        
+        a = jnp.transpose(jnp.concatenate([jnp.expand_dims(jnp.cos(phi),0),jnp.expand_dims(-jnp.sin(phi),0)],0),axes=[1,2,0])
+        b = jnp.transpose(jnp.concatenate([jnp.expand_dims(jnp.sin(phi),0),jnp.expand_dims(jnp.cos(phi),0)],0),axes=[1,2,0])
+
+        R = jnp.einsum("ijk...->jki...", jnp.concatenate([jnp.expand_dims(a,0),jnp.expand_dims(b,0)],0))
+        
+        xi = x[jnp.arange(x0s.shape[0]),inds[:,0]]
+        xj = x[jnp.arange(x0s.shape[0]),inds[:,1]]
+        
+        scaled_ij = (xj-xi)/jnp.expand_dims(l_ijs,-1) * jnp.expand_dims(gik,-1)
+        
+        x_k = jnp.squeeze(jnp.matmul(R, jnp.expand_dims(scaled_ij,-1))) + xi
+        x_k = jnp.where(jnp.tile(jnp.expand_dims(node_types[:,k],-1),[1,thetas.shape[0],2])==0.0,x_k,jnp.zeros_like(x_k))
+
+        x_k = jnp.expand_dims(x_k,1)
+        x_k = jnp.pad(x_k,[[0,0],[k,x0s.shape[1]-k-1],[0,0],[0,0]],mode='constant')
         
         x += x_k
     return x

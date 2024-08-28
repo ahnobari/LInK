@@ -524,6 +524,7 @@ class PathSynthesis:
 
     def demo_sythesize_step_1(self, target_curve, partial=False):
         torch.cuda.empty_cache()
+        jax.clear_caches()
         start_time = time.time()
         
         target_curve = preprocess_curves(torch.tensor(target_curve).float().to(self.device).unsqueeze(0),self.curve_size)[0]
@@ -604,6 +605,7 @@ class PathSynthesis:
         return payload, fig1, fig2
     
     def demo_sythesize_step_2(self, payload, max_size=20):
+        jax.clear_caches()
         target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial, size = payload
         
         input_tensor = target_curve.unsqueeze(0)
@@ -648,6 +650,7 @@ class PathSynthesis:
         return payload, fig
     
     def demo_sythesize_step_3(self, payload, progress=None):
+        jax.clear_caches()
         idxs, tid, target_curve_copy, target_curve_copy_, target_curve_, target_curve, og_scale, partial, size = payload
         
         As = torch.tensor(self.As[idxs[tid]]).float().to(self.device)
