@@ -1,7 +1,7 @@
 # LInK: Learning Joint Representations of Design and Performance Spaces through Contrastive Learning for Mechanism Synthesis
 LInK is a novel framework that integrates contrastive learning of performance and design space with optimization techniques for solving complex inverse problems in engineering design with discrete and continuous variables. We focus on the path synthesis problem for planar linkage mechanisms in this application. This repo is the official release of the code and data used in this work.
 
-[<img src="https://i.ibb.co/PCWxYQx/ezgif-7-d82a7b1fe9.gif" style="width:100%; max-width:1000px;"/>](https://ahn1376-linkalphabetdemo.hf.space/)
+[<img src="https://github.com/user-attachments/assets/7e6790c7-fbbe-4658-96f7-25aad304c59d" style="width:100%; max-width:1000px;"/>](https://ahn1376-linkalphabetdemo.hf.space/)
 
 [Simple Fun Alphabet Demo](https://ahn1376-linkalphabetdemo.hf.space/)
 
