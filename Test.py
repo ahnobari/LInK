@@ -33,13 +33,13 @@ args = argparser.parse_args()
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_device
 
-from LInK.Optim import PathSynthesis
+from LInK.OptimJax import PathSynthesis
 from pathlib import Path
 
 import numpy as np
 import pickle
 import torch
-
+import jax
 
 # turn off gradient computation
 torch.set_grad_enabled(False)
@@ -60,7 +60,7 @@ else:
         
 Trainer.model_base = Trainer.model_base.to('cpu')
 Trainer.model_mechanism = Trainer.model_mechanism.to('cpu')
-
+Trainer.model_input.compile()
 
 # load data
 if not os.path.exists(args.data_folder) or not os.path.exists(os.path.join(args.data_folder, 'target_curves.npy')) or not os.path.exists(os.path.join(args.data_folder, 'connectivity.npy')) or not os.path.exists(os.path.join(args.data_folder, 'x0.npy')) or not os.path.exists(os.path.join(args.data_folder, 'node_types.npy')):
@@ -76,7 +76,8 @@ if not os.path.exists(args.vis_folder):
     os.mkdir(args.vis_folder)
 
 emb  = np.load(os.path.join(args.embedding_folder, 'embeddings.npy'))[0:2000000]
-emb = torch.tensor(emb).float().to(device)
+# emb = torch.tensor(emb).float().to(device)
+emb = jax.numpy.array(emb, dtype=jax.numpy.float32)
 As = np.load(os.path.join(args.data_folder, 'connectivity.npy'))[0:2000000]
 x0s = np.load(os.path.join(args.data_folder, 'x0.npy'))[0:2000000]
 node_types = np.load(os.path.join(args.data_folder, 'node_types.npy'))[0:2000000]
