@@ -158,7 +158,7 @@ def get_layers(A, x0, node_types, sol, zero_act = False, relax_groud = True):
     m.addConstrs((ml >= z[i] for i in range(O.shape[0])), name="ml>z")
 
     m.setObjective(ml, gp.GRB.MINIMIZE)
-    m.setParam('TimeLimit', 30)
+    m.setParam('TimeLimit', 20)
     m.setParam('Threads', 24)
 
     m.optimize()
