@@ -7,6 +7,8 @@ import numpy as np
 from .DataUtils import prep_curves
 from tqdm import tqdm, trange
 
+import transformers
+
 def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='checkpoint.LInK', id='1lNFz8jNrKWeJNqYPuz9LUDF0cb4fl08d', id_cpu="1ZpOMiH-Z6oyD1Sw97PK0qb3wybfA6fW9"):
     import gdown
     gdown.download(id=id, output=f'{checkpoint_folder}/{checkpoint_name}', quiet=False)
@@ -69,6 +71,52 @@ class GraphHop(nn.Module):
             
         x = self.fc(x) # x: [num_graphs, embedding_dim]
         return x
+
+class LInKDecoder(nn.Module):
+    def __init__(self, latent_dim = 512, vocab_size = 26, hidden_size = 256, intemediate_size = 1024, num_hidden_layers = 8, num_attention_heads = 16, max_position_embeddings = 128):
+        super(LInKDecoder, self).__init__()
+        # llama Decoder With fixed length latent input before SOS
+        self.latent_map = nn.Linear(latent_dim, hidden_size)
+        self.continious_map = nn.Linear(2, hidden_size)
+
+        model_config = transformers.LlamaConfig(
+            vocab_size = vocab_size,
+            hidden_size = hidden_size,
+            intermediate_size = intemediate_size,
+            num_hidden_layers = num_hidden_layers,
+            num_attention_heads = num_attention_heads,
+            max_position_embeddings = max_position_embeddings
+        )
+
+        self.decoder = transformers.LlamaModel(model_config)
+
+        self.SOS = nn.Parameter(torch.randn(1,1,hidden_size))
+
+        self.node_type_classifier = nn.Linear(hidden_size, 3)
+        self.continious_mlp = nn.Linear(hidden_size, 2)
+        self.connectivity_classifier = nn.Linear(hidden_size, 21)
+    
+    def forward(self, inputs):
+        latent, input_ids, positions, mask = inputs
+
+        latent = self.latent_map(latent)
+        latent = latent.unsqueeze(1)
+        sos = self.SOS.repeat(latent.shape[0],1,1)
+        pose_embeddings = self.continious_map(positions)
+
+        sequence_emb = self.decoder.embed_tokens(input_ids)
+        sequence_emb[:,1::4] = pose_embeddings
+
+        x = torch.cat([latent, sos, sequence_emb], dim=1)
+        mask = torch.cat([torch.ones(mask.shape[0],2).bool().to(mask.device), mask], dim=1)
+        x = self.decoder(inputs_embeds=x, attention_mask=mask).last_hidden_state
+
+        node_types = self.node_type_classifier(x[:,1::4,:])[:,:-1,:]
+        continious = self.continious_mlp(x[:,2::4,:])
+        connectivity_1 = self.connectivity_classifier(x[:,3::4,:])
+        connectivity_2 = self.connectivity_classifier(x[:,4::4,:])
+
+        return x, node_types, continious, connectivity_1, connectivity_2
 
 class GATBaseline(nn.Module):
     def __init__(self, num_node_features = 5, hidden_dim = 768, embedding_dim = 512, num_layers= 16, num_attn_heads=8):
@@ -205,7 +253,7 @@ class ProjectionHead(nn.Module):
         x = self.layers(x)
         return x
 
-class Constrastive_Curve(nn.Module):
+class Contrastive_Curve(nn.Module):
     def __init__(self, in_channels=1, emb_size=128):
         super().__init__()
         self.convnet =  models.resnet50(pretrained=True)
@@ -248,8 +296,8 @@ class ContrastiveTrainLoop:
         else:
             self.device = device
         
-        self.model_input = Constrastive_Curve(emb_size = emb_size).to(self.device)
-        self.model_base = Constrastive_Curve(emb_size = emb_size).to(self.device)
+        self.model_input = Contrastive_Curve(emb_size = emb_size).to(self.device)
+        self.model_base = Contrastive_Curve(emb_size = emb_size).to(self.device)
         if baseline == "GAT":
             self.model_mechanism = GATBaseline(num_node_features=num_node_features, hidden_dim=hidden_dim * 2, num_layers=num_layers, num_attn_heads=num_attn_heads, embedding_dim=emb_size).to(self.device)
         elif baseline == "GCN":
@@ -376,4 +424,3 @@ class ContrastiveTrainLoop:
                 embeddings.append(emb.detach().cpu().numpy())
             return np.concatenate(embeddings)
         
-    

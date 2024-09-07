@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from .CurveUtils import uniformize
 
+from torch.utils.data import Dataset, DataLoader
+
 def rnd_fourier_transform(curves_in,n):
     
     # equidistant sampling (Remove Timing)
@@ -131,5 +133,42 @@ def download_data(data_folder='./Data/', test_folder='./TestData/'):
     gdown.download(id=alphabet_test_id, output=test_folder+'alphabet.npy', quiet=False)
     gdown.download(id=gcp_micp_test_id, output=test_folder+'gcp_micp.npy', quiet=False)
     
+class LInKDataset(Dataset):
+    def __init__(self, mechanism_graphs, curves, mechanism_sequences, x0s, masks, curve_size=200):
+        self.mechanism_graphs = mechanism_graphs
+        self.curves = curves
+        self.mechanism_sequences = mechanism_sequences
+        self.x0s = x0s
+        self.masks = masks
+
+        self.curve_size = curve_size
+        
+    def __len__(self):
+        return self.x0s.shape[0]
     
+    def load(self, idx):
+        return None
     
+    def batch_load(self, idxs, device=None):
+        
+        if device is None:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        batch_mech = self.mechanism_graphs[idxs]
+        batch_curves = torch.tensor(self.curves[idxs]).float().to(device)
+
+        x, edge_index, size = zip(*batch_mech)
+        size = np.array(size)
+        x = torch.tensor(np.concatenate(x)).float().to(device)
+        num_edges = np.array([e.shape[1] for e in edge_index])
+        edge_index = torch.tensor(np.concatenate(edge_index,-1) + np.repeat(np.cumsum(np.pad(size,[1,0],constant_values=0))[:-1],num_edges).reshape(1,-1)).long().to(device)
+        b = torch.tensor(np.repeat(np.arange(size.shape[0]),size)).long().to(device)
+        # ext_idx = torch.tensor(np.cumsum(size)-1).long().to(device)
+        
+        base, inp = prep_curves(batch_curves, self.curve_size)
+
+        batch_sequence = torch.tensor(self.mechanism_sequences[idxs]).long().to(device)
+        batch_x0 = torch.tensor(self.x0s[idxs]).float().to(device)
+        batch_mask = torch.tensor(self.masks[idxs]).bool().to(device)
+        
+        return {'inp':inp, 'base':base}, {'x':x, 'edge_index':edge_index, 'batch':b}, [batch_sequence, batch_x0, batch_mask]
