@@ -130,7 +130,7 @@ class Trainer:
         torch.cuda.empty_cache()
 
     def setup_optimizer(self):
-        params = list(self.model_input.parameters()) + list(self.model_base.parameters()) + list(self.model_mechanism.parameters() + list(self.decoder.parameters()))
+        params = list(self.model_input.parameters()) + list(self.model_base.parameters()) + list(self.model_mechanism.parameters()) + list(self.decoder.parameters())
         if self.optimizer_name == 'Adam':
             self.optimizer = torch.optim.Adam(params, lr=self.lr, weight_decay=self.weight_decay)
         elif self.optimizer_name == 'AdamW':
