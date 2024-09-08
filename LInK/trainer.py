@@ -11,7 +11,7 @@ import os
 from .DataUtils import prep_curves
 from .nn import Clip_loss
 
-def recon_loss(decode_out, decode_inps):
+def recon_loss(decode_out, decoder_inps):
     input_ids, positions, mask = decoder_inps
     raw_out, node_type, continious, connectivity_1, connectivity_2 = decode_out
 
@@ -19,19 +19,19 @@ def recon_loss(decode_out, decode_inps):
 
     node_type_target = input_ids[:,::4] * mask[:,::4]
     node_type_pred = node_type.transpose(1,2)
-    node_type_loss = torch.mean(loss_fn(node_type_pred, node_type_target) * mask[:,::4])
+    node_type_loss = torch.sum(loss_fn(node_type_pred, node_type_target) * mask[:,::4])/mask[:,::4].sum()
 
     continious_target = positions * mask[:,1::4].unsqueeze(-1)
     continious_pred = continious * mask[:,1::4].unsqueeze(-1)
-    continious_loss = torch.mean((continious_pred - continious_target)**2)
+    continious_loss = torch.sum((continious_pred - continious_target)**2)/mask[:,1::4].sum()/2
 
     connectivity_1_target = (input_ids[:,2::4]-4) * mask[:,2::4]
     connectivity_1_pred = connectivity_1.transpose(1,2)
-    connectivity_1_loss = torch.mean(loss_fn(connectivity_1_pred, connectivity_1_target) * mask[:,2::4])
+    connectivity_1_loss = torch.sum(loss_fn(connectivity_1_pred, connectivity_1_target) * mask[:,2::4])/mask[:,2::4].sum()
 
     connectivity_2_target = (input_ids[:,3::4]-4) * mask[:,3::4]
     connectivity_2_pred = connectivity_2.transpose(1,2)
-    connectivity_2_loss = torch.mean(loss_fn(connectivity_2_pred, connectivity_2_target) * mask[:,3::4])
+    connectivity_2_loss = torch.sum(loss_fn(connectivity_2_pred, connectivity_2_target) * mask[:,3::4])/mask[:,3::4].sum()
 
     recon_loss = node_type_loss + continious_loss + connectivity_1_loss + connectivity_2_loss
 
@@ -67,8 +67,8 @@ class Trainer:
                 self.model_base = torch.compile(self.model_base)
             if hasattr(self.model_mechanism, 'compile'):
                 self.model_mechanism = torch.compile(self.model_mechanism)
-            if hasattr(self.decoder, 'compile'):
-                self.decoder = torch.compile(self.decoder)
+            # if hasattr(self.decoder, 'compile'):
+            #     self.decoder = torch.compile(self.decoder)
         
         if self.DDP:
             if self.enable_profiling:
@@ -289,7 +289,7 @@ class Trainer:
                         z_i = self.model_input(batch['inp'])
                         z_j = self.model_base(batch['base'])
                         z_k = self.model_mechanism(batch_mech['x'], batch_mech['edge_index'], batch_mech['batch'])
-                        decode_out = self.decoder([z_k]+decoder_inps)
+                        decode_out = self.decoder(z_k, decoder_inps)
 
                         loss_c = Clip_loss(z_i, z_j, temperature)
                         loss_m = Clip_loss(z_j, z_k, temperature)
@@ -299,7 +299,7 @@ class Trainer:
                     z_i = self.model_input(batch['inp'])
                     z_j = self.model_base(batch['base'])
                     z_k = self.model_mechanism(batch_mech['x'], batch_mech['edge_index'], batch_mech['batch'])
-                    decode_out = self.decoder([z_k]+decoder_inps)
+                    decode_out = self.decoder(z_k, decoder_inps)
 
                     loss_c = Clip_loss(z_i, z_j, temperature)
                     loss_m = Clip_loss(z_j, z_k, temperature)
@@ -326,13 +326,13 @@ class Trainer:
                 
             if verbose and self.is_main_process():
                 print(f'Epoch {self.current_epoch}, Loss: {epoch_loss/steps_per_epoch}')
-            
-            if self.current_epoch % checkpoint_interval == 0:
-                self.save_checkpoint(os.path.join(checkpoint_dir, f'checkpoint_epoch_{self.current_epoch}.pth'))
 
-            if (self.current_epoch-1) % checkpoint_interval == 0 and self.current_epoch > 1:
-                if self.is_main_process():
-                    os.remove(os.path.join(checkpoint_dir, f'checkpoint_epoch_{self.current_epoch-1}.pth'))
+            self.save_checkpoint(os.path.join(checkpoint_dir, f'checkpoint_epoch_{self.current_epoch}.pth'))
+
+            if (self.current_epoch-1) % checkpoint_interval == 0:
+                pass
+            elif self.is_main_process():
+                os.remove(os.path.join(checkpoint_dir, f'checkpoint_epoch_{self.current_epoch-1}.pth'))
 
         if self.DDP:
             dist.barrier()
@@ -372,7 +372,7 @@ class Trainer:
                         z_i = self.model_input(batch['inp'])
                         z_j = self.model_base(batch['base'])
                         z_k = self.model_mechanism(batch_mech['x'], batch_mech['edge_index'], batch_mech['batch'])
-                        decode_out = self.decoder([z_k]+decoder_inps)
+                        decode_out = self.decoder(z_k, decoder_inps)
 
                         loss_c = Clip_loss(z_i, z_j, temperature)
                         loss_m = Clip_loss(z_j, z_k, temperature)
@@ -382,7 +382,7 @@ class Trainer:
                     z_i = self.model_input(batch['inp'])
                     z_j = self.model_base(batch['base'])
                     z_k = self.model_mechanism(batch_mech['x'], batch_mech['edge_index'], batch_mech['batch'])
-                    decode_out = self.decoder([z_k]+decoder_inps)
+                    decode_out = self.decoder(z_k, decoder_inps)
 
                     loss_c = Clip_loss(z_i, z_j, temperature)
                     loss_m = Clip_loss(z_j, z_k, temperature)

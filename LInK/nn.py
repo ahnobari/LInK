@@ -96,8 +96,8 @@ class LInKDecoder(nn.Module):
         self.continious_mlp = nn.Linear(hidden_size, 2)
         self.connectivity_classifier = nn.Linear(hidden_size, 21)
     
-    def forward(self, inputs):
-        latent, input_ids, positions, mask = inputs
+    def forward(self, latent, inputs):
+        input_ids, positions, mask = inputs
 
         latent = self.latent_map(latent)
         latent = latent.unsqueeze(1)
@@ -108,7 +108,7 @@ class LInKDecoder(nn.Module):
         sequence_emb[:,1::4] = pose_embeddings
 
         x = torch.cat([latent, sos, sequence_emb], dim=1)
-        mask = torch.cat([torch.ones(mask.shape[0],2).bool().to(mask.device), mask], dim=1)
+        mask = torch.cat([torch.ones(mask.shape[0],2).bool().to(mask.device), mask], dim=1).float()
         x = self.decoder(inputs_embeds=x, attention_mask=mask).last_hidden_state
 
         node_types = self.node_type_classifier(x[:,1::4,:])[:,:-1,:]
