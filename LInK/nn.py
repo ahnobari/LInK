@@ -275,6 +275,29 @@ class Contrastive_Curve(nn.Module):
         xp = self.projector(torch.squeeze(out))
         
         return xp
+
+class Constrastive_Curve(nn.Module):
+    def __init__(self, in_channels=1, emb_size=128):
+        super().__init__()
+        self.convnet =  models.resnet50(pretrained=True)
+        self.convnet.conv1 = nn.Conv2d(in_channels, 64, kernel_size=(3, 3), stride=(1, 1), bias=False, padding="same")
+        # self.convnet.maxpool = Identity()
+        self.convnet.fc = Identity()
+        
+        for p in self.convnet.parameters():
+            p.requires_grad = True
+            
+        self.projector = ProjectionHead(2048, 2048, emb_size)
+
+    def forward(self,x):
+        
+        x = torch.unsqueeze(x,1)
+
+        out = self.convnet(x)
+        
+        xp = self.projector(torch.squeeze(out))
+        
+        return xp
     
 def Clip_loss(z_i,z_j, temperature = 0.07):
     

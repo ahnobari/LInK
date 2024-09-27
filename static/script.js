@@ -18,8 +18,10 @@ var multi_high = window.multi_high;
 var current_frame = 0;
 var meshes = [];
 var joint_meshes = [];
+var rad = 0.03;
 
 function make_linkage(x_length, y_length, z_length, hole_r) {
+    hole_r = rad;
     var link = new THREE.BoxGeometry( x_length, y_length, z_length );
     var end_1 = new THREE.CylinderGeometry(y_length/2, y_length/2, z_length, 32);
     var end_2 = new THREE.CylinderGeometry(y_length/2, y_length/2, z_length, 32);
@@ -43,6 +45,7 @@ function make_linkage(x_length, y_length, z_length, hole_r) {
 }
 
 function make_link(x_length, y_length, z_length, hole_r, Theta_z, translation) {
+    hole_r = rad;
     var full_link = make_linkage(x_length, y_length, z_length * 0.9, hole_r);
     full_link.rotation.z = Theta_z;
     full_link.position.set(translation[0] + x_length/2 * Math.cos(Theta_z), translation[1] + x_length/2 * Math.sin(Theta_z), translation[2]);
@@ -50,6 +53,7 @@ function make_link(x_length, y_length, z_length, hole_r, Theta_z, translation) {
 }
 
 function make_joint(x, y, z, height, radius=0.03) {
+    radius = rad;
     var joint = new THREE.CylinderGeometry(radius, radius, height * 0.9, 32);
     joint.rotateX(Math.PI/2);
     joint = new THREE.Mesh(joint);
@@ -84,6 +88,33 @@ function make_joint(x, y, z, height, radius=0.03) {
     }
     var mean_x = (max_x + min_x) / 2;
     var mean_y = (max_y + min_y) / 2;
+
+    // resize the res to a box from -1 to 1
+    var scaling_factor = 8/Math.max(max_x - min_x, max_y - min_y);
+
+    for (let i = 0; i < res.length; i++) {
+        for (let j = 0; j < res[i][1].length; j++) {
+            res[i][1][j][0] = (res[i][1][j][0] - mean_x) * scaling_factor;
+            res[i][1][j][1] = (res[i][1][j][1] - mean_y) * scaling_factor;
+        }
+        for (let j = 0; j < res[i][0].length; j++) {
+            res[i][0][j][0] = res[i][0][j][0] * scaling_factor;
+            res[i][0][j][1] = res[i][0][j][1] * scaling_factor;
+            res[i][0][j][2] = res[i][0][j][2] * scaling_factor;
+            res[i][0][j][5][0] = (res[i][0][j][5][0] - mean_x) * scaling_factor;
+            res[i][0][j][5][1] = (res[i][0][j][5][1] - mean_y) * scaling_factor;
+        }
+    }
+
+    for (let i = 0; i < hc.length; i++) {
+        hc[i][0] = (hc[i][0] - mean_x) * scaling_factor;
+        hc[i][1] = (hc[i][1] - mean_y) * scaling_factor;
+    }
+
+    mean_x = 0;
+    mean_y = 0;
+
+    rad = res[0][0][0][2] * 0.7;
 
     var container, camera, scene, renderer, controls, last_frame_time;
     
@@ -153,8 +184,10 @@ function make_joint(x, y, z, height, radius=0.03) {
             joint_meshes.push(make_joint(joint[0], joint[1], joint[3], joint[2]));
             if(joint[4] == 1)//brown
                 joint_meshes[i].material = new THREE.MeshStandardMaterial({ color: 0xff4c00, side: THREE.DoubleSide, depthWrite: false});
-            else    
+            else if(i<results[1].length-1)
                 joint_meshes[i].material = new THREE.MeshStandardMaterial({ color: 0x121212, side: THREE.DoubleSide, depthWrite: false});
+            else
+                joint_meshes[i].material = new THREE.MeshStandardMaterial({ color: 0xe00043, side: THREE.DoubleSide, depthWrite: false});
             scene.add(joint_meshes[i]);
         }
 
@@ -201,7 +234,7 @@ function make_joint(x, y, z, height, radius=0.03) {
             var geometry = new LineGeometry();
             geometry.setPositions( points );
             var material = new LineMaterial( {
-                color: 0xff4c00,
+                color: 0xe00043,
                 linewidth: 0.002, // in world units with size attenuation, pixels otherwise
                 vertexColors: false,
 

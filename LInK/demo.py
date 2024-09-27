@@ -48,6 +48,18 @@ function test(){
         var path_start;
         var keys = {37: 1, 38: 1, 39: 1, 40: 1};
 
+        function pre_defined_curve(curve){
+          curve = JSON.parse(curve);
+          document.getElementById("sketch").innerHTML = ""
+          path = [];
+          path_start = curve[0];
+          
+          for(var i = 0; i < curve.length - 1; i++){
+            document.getElementById("sketch").innerHTML += '<line x1="' + curve[i][0] + '" y1="' + curve[i][1] + '" x2="' + curve[i+1][0] + '" y2="' + curve[i+1][1] + '" stroke="black" />';
+          }
+          path = curve;
+        }
+
         function downloadObjectAsJson(exportName){
             var JStr = document.getElementById("json_text").querySelectorAll("textarea")[0].value;
             console.log(JStr);

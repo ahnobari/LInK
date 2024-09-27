@@ -90,3 +90,94 @@ def apply_transforms(curves, translations, scales, rotations):
     curves = torch.bmm(R, curves.transpose(1,2)).transpose(1,2)
     curves = curves + translations.unsqueeze(1)
     return curves
+
+
+def get_graph(con_mat: np.ndarray):
+    num_nodes = (con_mat.sum(axis=-1)>0).sum()
+    graph_list = []
+    for (i,j) in itertools.combinations(range(num_nodes),2):
+        if con_mat[i,j] == True:
+            graph_list.append(set([i,j]))
+    
+    return graph_list
+            
+def get_triangles(con_mat: np.ndarray):
+    triangles = []
+    graph_list = get_graph(con_mat)
+    for links_combination in itertools.combinations(graph_list,3):
+        if len(set.union(*links_combination)) == 3:
+            triangles.append(links_combination)
+            
+    return triangles,graph_list            
+
+def check_commons(tuple_1: tuple,tuple_2: tuple):
+    id_list_2 = list(range(len(tuple_2)))
+    common = False
+    for (i,set_1) in enumerate(tuple_1):
+        for (j,set_2) in enumerate(tuple_2):
+            if set_1 == set_2:
+                common = True
+                id_list_2.remove(j)
+    if common:
+        return True,tuple_1+tuple(tuple_2[i] for i in id_list_2)
+    else:
+        return False,()
+
+def check_make_extension(edge_list:list, body_list:list):
+    elem_count_check = [len(body)>3 for body in body_list]
+    need_updates = any(elem_count_check)
+    if need_updates:
+        body_list_nups = [body for (ecc,body) in zip(elem_count_check,body_list) if ecc]
+        for body in body_list_nups:
+            nodes = {node for el_set in body for node in el_set}
+            new_edges = [{i,j} for (i,j) in itertools.combinations(nodes,2) if {i,j} not in edge_list]
+            if len(new_edges)==0:
+                return None
+            else:
+                edge_list = edge_list+new_edges
+                return edge_list
+    else:
+        return None
+    
+def get_bodies(con_mat: np.ndarray,new_con_mat: np.ndarray):
+    triangles, edge_list = get_triangles(con_mat)
+    unmod_edge_list = edge_list.copy()
+    if triangles:
+        body_list = [triangles[0]]
+        for triang in triangles[1:]:
+            cumm_common = False
+            for (i,body) in enumerate(body_list):
+                common,body_tuple = check_commons(triang,body)
+                if common:
+                    cumm_common = True
+                    body_list.remove(body)
+                    body_list.append(body_tuple)
+            if cumm_common == False:
+                body_list.append(triang)
+        for body in body_list:
+            for elem in body:
+                edge_list.remove(elem)
+        
+        body_list += [(elem,) for elem in edge_list]
+        
+        rval = check_make_extension(unmod_edge_list,body_list)
+        if rval is not None:
+            up_con_mat = con_mat.copy()
+            for edge in rval:
+                ij = tuple(edge)
+                up_con_mat[ij]=True
+                up_con_mat[ij[::-1]]=True
+            
+            num_bodies,num_nodes,body_list = get_bodies(up_con_mat,new_con_mat)
+            return num_bodies,num_nodes,body_list
+    else:
+        body_list = [(elem,) for elem in edge_list]
+    
+    ## getting new connectivity matrix, node and body numbers
+    for (bn,body) in enumerate(body_list):
+        for (i,j) in body:
+            new_con_mat[i,j] = bn+1
+            new_con_mat[j,i] = bn+1
+    num_bodies = len(body_list)
+    num_nodes = np.sum(np.any(con_mat,axis=0))
+    return num_bodies,num_nodes,body_list

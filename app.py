@@ -19,6 +19,7 @@ from LInK.demo import draw_html, draw_script, css
 from LInK.Solver import solve_rev_vectorized_batch_CPU
 from LInK.CAD import get_layers, create_3d_html
 from LInK.OptimJax import PathSynthesis
+from LInK.OptimJax import preprocess_curves
 from pathlib import Path
 import jax
 
@@ -68,6 +69,26 @@ x0s = np.load(os.path.join(args.data_folder, 'x0.npy'))[0:2000000]
 node_types = np.load(os.path.join(args.data_folder, 'node_types.npy'))[0:2000000]
 curves = np.load(os.path.join(args.data_folder, 'target_curves.npy'))[0:2000000]
 sizes = (As.sum(-1)>0).sum(-1)
+alpha = np.load('./TestData/alphabet.npy', allow_pickle=True)
+
+partials = []
+for i in range(len(alpha)):
+    curve = preprocess_curves(alpha[i:i+1])[0]
+    partial = True
+    t = np.linalg.norm(curve[0] - curve[1])
+    e = np.linalg.norm(curve[0] - curve[-1])
+    if e/t <= 1.1:
+        partial = False
+    partials.append(partial)
+
+    #rotate curve 180 degrees
+    R = np.array([[-1, 0],[0,1]]) @ np.array([[-1, 0],[0,-1]])
+    alpha[i] = np.dot(R, alpha[i].T).T
+
+a = np.copy(alpha[15])
+alpha[15] = alpha[16]
+alpha[16] = a
+   
 
 torch.cuda.empty_cache()
 
@@ -101,7 +122,7 @@ with gr.Blocks(css=css, js=draw_script) as block:
     
     syth  = gr.State()
     state = gr.State()
-    dictS = gr.State(False)
+    dictS = gr.State()
     
     with gr.Row():
         intro = gr.Markdown('''
@@ -124,6 +145,10 @@ with gr.Blocks(css=css, js=draw_script) as block:
 
         with gr.Column(min_width=350,scale=2):
             canvas = gr.HTML(draw_html)
+
+            # add predefiened curve choices of alphabet
+            curve_choices = gr.Radio(["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"],label="Predefined Curves",elem_classes="curve_choices", type='index')
+
             clr_btn = gr.Button("Clear",elem_classes="clr_btn")
             
             btn_submit = gr.Button("Perform Path Synthesis",variant='primary',elem_classes="clr_btn")
@@ -141,6 +166,8 @@ with gr.Blocks(css=css, js=draw_script) as block:
             init_optim_iters = gr.Slider(minimum = 10 , maximum = 50, value=20, step=10, label="Initial Optimization Iterations On All Candidates", interactive=True)
             top_n_level2 = gr.Slider(minimum = 10 , maximum = 100, value=40, step=10, label="Top N Candidates For Final Optimization", interactive=True, visible=False)
             BFGS_max_iter = gr.Slider(minimum = 50 , maximum = 1000, value=200, step=50, label="Iterations For Final Optimization", interactive=True)
+
+            storage = gr.HTML('<textarea id="json_text" style="display:none;"></textarea>')
         
     with gr.Row():
         with gr.Row():
@@ -171,6 +198,16 @@ with gr.Blocks(css=css, js=draw_script) as block:
     event5 = event4.then(lambda sy,s: sy.demo_sythesize_step_3(s,progress=gr.Progress()), inputs=[syth,state], outputs=[mechanism_plot,state,progl], concurrency_limit=10)
     event6 = event5.then(make_cad, inputs=[state,partial], outputs=[plot_3d], concurrency_limit=10)
     event8 = event6.then(lambda: [gr.update(interactive=True)]*8, outputs=[btn_submit, n_freq, maximum_joint_count, time_steps, top_n, init_optim_iters, top_n_level2, BFGS_max_iter], concurrency_limit=10)
+    
+
+    def aux(state):
+        # Pass the state value to the JS function
+        return gr.HTML(f'<textarea id="json_text" style="display:none;">{state}</textarea>')
+        
+    e1 = curve_choices.change(lambda idx: (partials[idx], str((80*(alpha[idx][None])[0]+350//2).tolist())), outputs=[partial,dictS], inputs=[curve_choices])
+    e2 = e1.then(aux, inputs=[dictS], outputs=[storage])
+    e3 = e2.then(None, js='pre_defined_curve(document.getElementById("json_text").innerHTML)')
+    
     block.load()
     
     clr_btn.click(lambda x: x, js='document.getElementById("sketch").innerHTML = ""')
