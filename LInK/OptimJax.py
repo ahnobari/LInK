@@ -511,34 +511,34 @@ class PathSynthesis:
         
         input_tensor = target_curve[None]
         batch_padd = preprocess_curves(self.curves[np.random.choice(self.curves.shape[0],255)])
+        
         input_tensor = torch.tensor(np.concatenate([input_tensor,batch_padd],0)).float().to(self.device)
-        target_emb = self.models.compute_embeddings_input(input_tensor, 1000)[0]
-        target_emb = torch.tensor(target_emb).float().to(self.device)
+        with torch.cuda.amp.autocast():
+            target_emb = self.models.compute_embeddings_input(input_tensor, 1000)[0]
+        # target_emb = torch.tensor(target_emb).float().to(self.device)
         
-        ids = torch.tensor(np.where(self.sizes <= max_size)[0]).to(self.device).long()
-        idxs, sim = cosine_search(target_emb, self.precomputed_emb, ids=ids, max_batch_size=100000)
-        idxs = idxs.detach().cpu().numpy()
+        ids = np.where(self.sizes <= max_size)[0]
+        idxs, sim = cosine_search_jax(target_emb, self.precomputed_emb, ids=ids)
         
+        #max batch size is 250
+        tr,sc,an = [],[],[]
+        for i in range(int(np.ceil(self.top_n*5/250))):
+            tr_,sc_,an_ = find_transforms(self.curves[idxs[i*250:(i+1)*250]],target_curve_copy, )
+            tr.append(tr_)
+            sc.append(sc_)
+            an.append(an_)
+        tr = jax.numpy.concatenate(tr,0)
+        sc = jax.numpy.concatenate(sc,0)
+        an = jax.numpy.concatenate(an,0)
+        tiled_curves = target_curve_copy[None].repeat(self.top_n*5,0)
+        tiled_curves = apply_transforms(tiled_curves,tr,sc,-an)
+        CD = batch_ordered_distance(tiled_curves/sc[:,None,None],self.curves[idxs[:self.top_n*5]]/sc[:,None,None])
+        
+        #get best matches index
+        tid = jax.numpy.argsort(CD)[:self.top_n]
+    
         if verbose:
-            #max batch size is 250
-            tr,sc,an = [],[],[]
-            for i in range(int(np.ceil(self.top_n*5/250))):
-                tr_,sc_,an_ = find_transforms(self.curves[idxs[i*250:(i+1)*250]],target_curve_copy, )
-                tr.append(tr_)
-                sc.append(sc_)
-                an.append(an_)
-            tr = jax.numpy.concatenate(tr,0)
-            sc = jax.numpy.concatenate(sc,0)
-            an = jax.numpy.concatenate(an,0)
-            tiled_curves = target_curve_copy[None].repeat(self.top_n*5,0)
-            tiled_curves = apply_transforms(tiled_curves,tr,sc,-an)
-            CD = batch_ordered_distance(tiled_curves/sc[:,None,None],self.curves[idxs[:self.top_n*5]]/sc[:,None,None])
-            
-            #get best matches index
-            tid = jax.numpy.argsort(CD)[:self.top_n]
-            
             print(f'Best ordered distance found in top {self.top_n} is {CD.min()}')
-            
             if visualize:
                 grid_size = int(np.ceil(self.top_n**0.5))
                 fig, axs = plt.subplots(grid_size,grid_size,figsize=(10,10))
@@ -634,8 +634,8 @@ class PathSynthesis:
             
             st_id, en_id = get_partial_index(original_match,tiled_curves[0],)
             
-            st_theta = jax.numpy.linspace(0,2*np.pi,self.optim_timesteps)[st_id].squeeze()
-            en_theta = jax.numpy.linspace(0,2*np.pi,self.optim_timesteps)[en_id].squeeze()
+            st_theta = np.linspace(0,2*np.pi,self.optim_timesteps)[st_id].squeeze()
+            en_theta = np.linspace(0,2*np.pi,self.optim_timesteps)[en_id].squeeze()
             
             st_theta[st_theta>en_theta] = st_theta[st_theta>en_theta] - 2*np.pi
             
@@ -644,7 +644,7 @@ class PathSynthesis:
             tid = (As[best_idx:best_idx+1].sum(-1)>0).sum(-1)-1
             best_matches = sol[np.arange(sol.shape[0]),tid]
             best_matches = uniformize(best_matches,self.optim_timesteps)
-            target_uni = uniformize(target_curve_copy,self.optim_timesteps)[0]
+            target_uni = uniformize(target_curve_copy[None],self.optim_timesteps)[0]
             
             tr,sc,an = find_transforms(best_matches,target_uni, )
             tiled_curves = uniformize(target_curve_copy[None],self.optim_timesteps)
@@ -668,7 +668,7 @@ class PathSynthesis:
                 plt.show()
         
         if verbose:
-            print(f'Final Chamfer Distance: {CD*og_scale:.7f}, Ordered Distance: {OD*(og_scale**2):.7f}')
+            print(f'Final Chamfer Distance: {CD[0]*og_scale:.7f}, Ordered Distance: {OD[0]*(og_scale**2):.7f}')
         
         A = As[best_idx]
         x = x[best_idx]
