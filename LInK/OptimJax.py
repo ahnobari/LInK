@@ -237,6 +237,42 @@ def preprocess_curves(curves, n=200):
 def get_scales(curves):
     return jax.numpy.sqrt(jax.numpy.square(curves-curves.mean(1)).sum(-1).sum(-1)/curves.shape[1])
 
+@jax.jit
+def blind_objective_batch(curve,As,x0s,node_types, curve_size = 200, thetas=jax.numpy.linspace(0.0,2*jax.numpy.pi,2000), CD_weight=1.0, OD_weight=1.0, idxs = None):
+    
+    curve = preprocess_curves(curve[None], curve_size)[0]
+    
+    sol = solve_rev_vectorized_batch(As,x0s,node_types,thetas)
+    
+    if idxs is None:
+        idxs = (As.sum(-1)>0).sum(-1)-1
+    current_sol = sol[jax.numpy.arange(sol.shape[0]),idxs]
+    
+    #find nans at axis 0 level
+    good_idx = jax.numpy.logical_not(jax.numpy.isnan(current_sol.sum(-1).sum(-1)))
+    best_matches_masked = current_sol * good_idx[:,None,None]
+    current_sol_r_masked = current_sol * ~good_idx[:,None,None]
+    current_sol = uniformize(current_sol, current_sol.shape[1])
+    current_sol = current_sol * good_idx[:,None,None] + current_sol_r_masked
+
+    dummy = uniformize(curve[None],thetas.shape[0])[0]
+    best_matches_r_masked = dummy[None].repeat(best_matches_masked.shape[0],0) * ~good_idx[:,None,None]
+    best_matches = best_matches_masked + best_matches_r_masked
+    best_matches = uniformize(best_matches,curve.shape[0])
+    
+    tr,sc,an = find_transforms(best_matches,curve)
+    tiled_curves = curve[None,:,:].repeat(best_matches.shape[0],0)
+    tiled_curves = apply_transforms(tiled_curves,tr,sc,-an)
+    
+    OD = batch_ordered_distance(current_sol[:,jax.numpy.linspace(0,current_sol.shape[1]-1,tiled_curves.shape[1]).astype(int),:]/sc[:,None,None],tiled_curves/sc[:,None,None])
+    CD = batch_chamfer_distance(current_sol/sc[:,None,None],tiled_curves/sc[:,None,None])
+
+    objective_function = CD_weight * CD + OD_weight * OD
+
+    return objective_function
+
+
+
 def make_batch_optim_obj(curve,As,x0s,node_types,timesteps=2000, CD_weight=1.0, OD_weight=1.0, start_theta=0.0, end_theta=2*jax.numpy.pi):
 
     thetas = jax.numpy.linspace(start_theta,end_theta,timesteps)

@@ -9,7 +9,7 @@ from tqdm import tqdm, trange
 
 import transformers
 
-def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='checkpoint.LInK', id='1lNFz8jNrKWeJNqYPuz9LUDF0cb4fl08d', id_cpu="1ZpOMiH-Z6oyD1Sw97PK0qb3wybfA6fW9"):
+def download_checkpoint(checkpoint_folder='./Checkpoints', checkpoint_name='checkpoint.LInK', id='1ZpOMiH-Z6oyD1Sw97PK0qb3wybfA6fW9', id_cpu="1ZpOMiH-Z6oyD1Sw97PK0qb3wybfA6fW9"):
     import gdown
     gdown.download(id=id, output=f'{checkpoint_folder}/{checkpoint_name}', quiet=False)
     cpu_name = checkpoint_name.replace('.','CPU.')
